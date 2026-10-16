@@ -1,0 +1,7 @@
+{
+  "name": "S.CHAK STUDIO: Image-to-LUT Generator",
+  "description": "A professional-grade color tool that extracts color profiles from reference images and generates industry-standard .cube 3D LUTs using the Reinhard color transfer algorithm.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
