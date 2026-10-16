@@ -1,6 +1,6 @@
 {
-  "name": "S.CHAK STUDIO: Image-to-LUT Generator",
-  "description": "A professional-grade color tool that extracts color profiles from reference images and generates industry-standard .cube 3D LUTs using the Reinhard color transfer algorithm.",
+  "name": "Lutcraft: Color Grading & LUT Creation Studio",
+  "description": "Lutcraft is an independent browser-based colour grading and LUT authoring studio. Create your look. Craft your colour. Extract a look from a reference image, grade with precision colour wheels, curves and sliders, and export industry-standard 3D LUTs (.CUBE, .3DL, CLF, HALD).",
   "requestFramePermissions": [
     "camera"
   ]

@@ -1,4 +1,5 @@
 import { RGB } from '../../types';
+import { BRAND } from '../brand';
 import { ColorConfig, createColorManagedEvaluator } from '../grade/colorConfig';
 import { evaluatePipeline } from '../grade/evaluate';
 import { GradePipeline } from '../grade/types';
@@ -30,7 +31,7 @@ export const DEFAULT_LUT_SIZE: LUTSize = 33;
 export function buildLUT3D(
   size: number,
   evaluate: ColorEvaluator,
-  title = 'S.CHAK STUDIO',
+  title = BRAND.name,
 ): LUT3D {
   const data = new Float32Array(size * size * size * 3);
   const denom = size - 1;
@@ -62,7 +63,7 @@ export function buildLUT3D(
 export function buildLUTFromPipeline(
   size: number,
   pipeline: GradePipeline,
-  title = 'S.CHAK STUDIO',
+  title = BRAND.name,
 ): LUT3D {
   return buildLUT3D(size, (rgb) => evaluatePipeline(rgb, pipeline), title);
 }
@@ -72,7 +73,7 @@ export function buildLUTColorManaged(
   size: number,
   pipeline: GradePipeline,
   colorConfig: ColorConfig,
-  title = 'S.CHAK STUDIO',
+  title = BRAND.name,
 ): LUT3D {
   const evaluate = createColorManagedEvaluator(pipeline, colorConfig);
   return buildLUT3D(size, (rgb) => evaluate(rgb), title);

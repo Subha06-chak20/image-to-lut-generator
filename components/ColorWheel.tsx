@@ -500,7 +500,7 @@ const PrecisionOverlay: React.FC<PrecisionOverlayProps> = ({
   const panel = (
     <div
       ref={panelRef}
-      className="fixed z-[200] w-[352px] max-w-[calc(100vw-32px)] max-h-[calc(100vh-32px)] overflow-y-auto scrollbar-hide bg-card border border-border rounded-xl shadow-2xl shadow-black/60 p-4"
+      className="fixed z-[200] w-[352px] max-w-[calc(100vw-32px)] max-h-[calc(100vh-32px)] overflow-y-auto scrollbar-hide bg-popover border border-border rounded-xl shadow-2xl shadow-black/25 p-4"
       style={{
         left: pos ? pos.x : PANEL_MARGIN,
         top: pos ? pos.y : PANEL_MARGIN,

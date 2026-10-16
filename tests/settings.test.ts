@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const KEY = 'schak-studio.settings.v1';
+const KEY = 'lutcraft.settings.v1';
 
 /** Minimal in-memory localStorage stand-in. */
 function makeStorage(initial?: string) {
@@ -29,38 +29,54 @@ afterEach(() => {
 });
 
 describe('settings store', () => {
-  it('defaults to GPU acceleration ON', async () => {
+  it('defaults to GPU acceleration ON and Light Studio', async () => {
     const { mod } = await load();
-    expect(mod.getSettings()).toEqual({ gpuAcceleration: true });
+    expect(mod.getSettings()).toEqual({ gpuAcceleration: true, theme: 'light' });
     expect(mod.DEFAULT_SETTINGS.gpuAcceleration).toBe(true);
+    expect(mod.DEFAULT_SETTINGS.theme).toBe('light');
   });
 
-  it('restores a persisted value', async () => {
-    const { mod } = await load(JSON.stringify({ gpuAcceleration: false }));
+  it('offers exactly the two documented themes', async () => {
+    const { mod } = await load();
+    expect(mod.THEMES.map((t) => t.id)).toEqual(['light', 'dark']);
+  });
+
+  it('restores persisted values', async () => {
+    const { mod } = await load(JSON.stringify({ gpuAcceleration: false, theme: 'dark' }));
     expect(mod.getSettings().gpuAcceleration).toBe(false);
+    expect(mod.getSettings().theme).toBe('dark');
   });
 
   it('survives a corrupt payload', async () => {
     const { mod } = await load('{not json at all');
-    expect(mod.getSettings()).toEqual({ gpuAcceleration: true });
+    expect(mod.getSettings()).toEqual({ gpuAcceleration: true, theme: 'light' });
   });
 
-  it('rejects a non-boolean field instead of letting it poison the app', async () => {
-    const { mod } = await load(JSON.stringify({ gpuAcceleration: 'yes' }));
-    expect(mod.getSettings().gpuAcceleration).toBe(true);
+  it('rejects invalid fields instead of letting them poison the app', async () => {
+    const { mod } = await load(JSON.stringify({ gpuAcceleration: 'yes', theme: 'neon' }));
+    expect(mod.getSettings()).toEqual({ gpuAcceleration: true, theme: 'light' });
   });
 
   it('ignores unknown keys', async () => {
     const { mod } = await load(JSON.stringify({ gpuAcceleration: false, evil: 1 }));
-    expect(mod.getSettings()).toEqual({ gpuAcceleration: false });
+    expect(mod.getSettings()).toEqual({ gpuAcceleration: false, theme: 'light' });
   });
 
   it('writes through to storage and returns the merged value', async () => {
     const { mod, storage } = await load();
     const next = mod.updateSettings({ gpuAcceleration: false });
     expect(next.gpuAcceleration).toBe(false);
-    expect(storage.map.get(KEY)).toBe(JSON.stringify({ gpuAcceleration: false }));
+    expect(storage.map.get(KEY)).toBe(
+      JSON.stringify({ gpuAcceleration: false, theme: 'light' }),
+    );
     expect(mod.getSettings().gpuAcceleration).toBe(false);
+  });
+
+  it('persists a theme switch', async () => {
+    const { mod, storage } = await load();
+    mod.updateSettings({ theme: 'dark' });
+    expect(mod.getSettings().theme).toBe('dark');
+    expect(JSON.parse(storage.map.get(KEY) as string).theme).toBe('dark');
   });
 
   it('notifies subscribers and unsubscribes cleanly', async () => {

@@ -186,12 +186,12 @@ const ScopesPanel: React.FC<ScopesPanelProps> = ({ sampleImage, previewCanvas, g
   ];
 
   return (
-    <div className="shrink-0 border-t border-border bg-zinc-950/80 backdrop-blur-sm">
+    <div className="shrink-0 border-t border-white/10 bg-zinc-950/90">
       <div className="h-9 flex items-center justify-between px-3 gap-2">
         <div className="flex items-center gap-1">
           <button
             onClick={() => setOpen((o) => !o)}
-            className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors"
+            className="flex items-center gap-1.5 text-[10px] font-semibold text-white/60 uppercase tracking-widest hover:text-white transition-colors"
           >
             <i className={`fa-solid fa-chevron-${open ? 'down' : 'up'} text-[9px]`}></i>
             Scopes
@@ -203,7 +203,7 @@ const ScopesPanel: React.FC<ScopesPanelProps> = ({ sampleImage, previewCanvas, g
                   key={t.id}
                   onClick={() => setTab(t.id)}
                   className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
-                    tab === t.id ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'
+                    tab === t.id ? 'bg-white/15 text-white' : 'text-white/55 hover:text-white'
                   }`}
                 >
                   {t.label}
@@ -230,7 +230,7 @@ const ScopesPanel: React.FC<ScopesPanelProps> = ({ sampleImage, previewCanvas, g
                 disabled={!s.available}
                 onClick={() => setSource(s.id)}
                 className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
-                  source === s.id ? 'bg-white/10 text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  source === s.id ? 'bg-white/15 text-white' : 'text-white/55 hover:text-white'
                 } ${!s.available ? 'opacity-30 cursor-not-allowed' : ''}`}
               >
                 {s.label}
@@ -244,7 +244,7 @@ const ScopesPanel: React.FC<ScopesPanelProps> = ({ sampleImage, previewCanvas, g
         <div className="h-[26vh] md:h-44 w-full px-2 pb-2">
           <canvas
             ref={canvasRef}
-            className="w-full h-full object-contain rounded border border-border/60"
+            className="w-full h-full object-contain rounded border border-white/10"
             style={{ imageRendering: 'pixelated' }}
           />
         </div>

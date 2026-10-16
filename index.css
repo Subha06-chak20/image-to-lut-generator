@@ -1,30 +1,79 @@
-/* S.CHAK STUDIO — base theme + component styles.
+/* Lutcraft — base theme + component styles.
    Tailwind is compiled locally via PostCSS (see tailwind.config.js);
-   utilities are emitted last so they win cascade ties, as before. */
+   utilities are emitted last so they win cascade ties, as before.
+
+   Two themes share one token set:
+     :root  → Light Studio (default)
+     .dark  → Dark Studio (opt-in, persisted in settings)
+
+   The image viewer and the scopes deliberately keep their own dark surfaces in
+   both themes — colour judgement needs a neutral surround — so they use fixed
+   dark utilities rather than these tokens. */
 
 @tailwind base;
 @tailwind components;
 
 :root {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --card: 240 10% 3.9%;
-  --card-foreground: 0 0% 98%;
-  --popover: 240 10% 3.9%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 0 0% 98%;
-  --primary-foreground: 240 5.9% 10%;
-  --secondary: 240 3.7% 15.9%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --accent: 240 3.7% 15.9%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --ring: 240 4.9% 83.9%;
+  /* ---- Light Studio (default) ---- */
+  --background: 48 20% 95%; /* Warm Ivory #F5F4F0 */
+  --foreground: 0 0% 15%; /* Charcoal #252525 */
+  --card: 0 0% 100%; /* Pure White #FFFFFF */
+  --card-foreground: 0 0% 15%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 15%;
+  --primary: 242 57% 65%; /* Indigo #7773D9 */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 45 15% 89%; /* Soft Grey #E8E6E0 */
+  --secondary-foreground: 0 0% 15%;
+  --muted: 45 16% 92%;
+  --muted-foreground: 0 0% 38%;
+  --accent: 45 16% 92%;
+  --accent-foreground: 0 0% 15%;
+  --destructive: 0 62% 48%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 45 13% 84%;
+  --input: 45 13% 84%;
+  --ring: 242 57% 65%;
+  /* Brand accents */
+  --brand: 242 57% 65%; /* Indigo #7773D9 */
+  --brand-soft: 243 66% 83%; /* Soft Lavender #B9B6F0 */
   --radius: 0.5rem;
+}
+
+.dark {
+  /* ---- Dark Studio (optional) ---- */
+  --background: 0 0% 9%;
+  --foreground: 45 16% 93%;
+  --card: 0 0% 12%;
+  --card-foreground: 45 16% 93%;
+  --popover: 0 0% 14%;
+  --popover-foreground: 45 16% 93%;
+  --primary: 242 57% 66%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 16%;
+  --secondary-foreground: 45 16% 93%;
+  --muted: 0 0% 16%;
+  --muted-foreground: 45 8% 63%;
+  --accent: 0 0% 18%;
+  --accent-foreground: 45 16% 93%;
+  --destructive: 0 58% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 21%;
+  --input: 0 0% 21%;
+  --ring: 242 57% 66%;
+  --brand: 242 60% 70%;
+  --brand-soft: 243 66% 83%;
+}
+
+html {
+  background-color: hsl(var(--background));
+  /* Keeps native widgets (scrollbars, file inputs, form controls) in step with
+     the chosen theme. */
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
 }
 
 body {
@@ -35,13 +84,46 @@ body {
   overflow: hidden;
 }
 
-.mono { font-family: 'JetBrains Mono', monospace; }
+/* The shell only — the viewer and scopes paint themselves, so a theme switch
+   never animates the footage. */
+.theme-shell {
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* The brand tile: a restrained two-stop indigo wash, deep enough to carry a
+   white glyph at 16px. */
+.brand-tile {
+  background-image: linear-gradient(145deg, hsl(var(--brand)) 0%, hsl(252 58% 52%) 100%);
+}
+
+/* Dialog scrim: a restrained charcoal wash rather than a heavy blackout, so the
+   graded frame stays legible behind a floating panel. */
+.bg-charcoal-scrim {
+  background-color: hsl(0 0% 8% / 0.45);
+}
 
 /* Custom Scrollbar */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: hsl(var(--muted)); border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.35);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.6);
+}
 
 .slider-handle {
   position: absolute;
@@ -97,12 +179,40 @@ input[type=range]::-webkit-slider-runnable-track {
   border-radius: 1px;
 }
 
+/* Native select menus inherit the page font rather than the OS default. */
+select {
+  font-family: inherit;
+}
+
+/* A single, consistent keyboard focus affordance. Utilities such as
+   `focus:outline-none` still win where a control draws its own ring. */
+:focus-visible {
+  outline: 2px solid hsl(var(--ring) / 0.55);
+  outline-offset: 2px;
+}
+
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-fade-in {
   animation: fade-in 0.4s ease-out forwards;
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-scale-in {
+  animation: scale-in 0.18s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes brand-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+.animate-brand-pulse {
+  animation: brand-pulse 1.6s ease-in-out infinite;
 }
 
 @tailwind utilities;

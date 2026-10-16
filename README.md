@@ -1,8 +1,18 @@
-# S.CHAK STUDIO: Image-to-LUT Generator
+# Lutcraft — Color Grading & LUT Creation Studio
 
-A browser-based, color-managed **image-to-LUT** tool that extracts a look from a reference image and generates industry-standard LUTs (`.cube`, 1D, `.3dl`, **CLF**, HALD CLUT) — with real scopes, white balance and a GPU trilinear renderer.
+**Create your look. Craft your colour.**
+
+A browser-based, color-managed **image-to-LUT** studio by **Subhadeep Chakraborty** that extracts a look from a reference image and generates industry-standard LUTs (`.cube`, 1D, `.3dl`, **CLF**, HALD CLUT) — with real scopes, white balance and a GPU trilinear renderer.
 
 Everything runs client-side. No backend, no API key.
+
+## Brand & themes
+
+- Product identity, wordmark, favicon, page title, loading screen, export surface, About dialog and footer all come from one source of truth: `services/brand.ts`.
+- **Two studio themes**: **Light Studio** (default — warm ivory `#F5F4F0`, pure white `#FFFFFF`, soft grey `#E8E6E0`, charcoal `#252525`) and **Dark Studio**. The choice persists in `localStorage` under `lutcraft.settings.v1`.
+- The **image viewer and the scopes keep a dark, neutral surround in both themes** so colour judgement is never affected by the surrounding chrome.
+- The theme is applied pre-paint by an inline script in `index.html`, so a Dark Studio reload never flashes the light background.
+
 
 ## Overview
 
@@ -17,17 +27,17 @@ Everything runs client-side. No backend, no API key.
 ### Grading foundation
 - **True trilinear interpolation** everywhere (preview + export), removing the banding of nearest-neighbour lookup.
 - **GPU (WebGL2) renderer** using a filterable `RGBA16F` 3D texture; automatic **CPU trilinear fallback**.
-- **GPU Acceleration setting** (default **ON**) with persistence, status indicator and GPU device info — see below.
+- **GPU Acceleration setting** (default **ON**) with persistence; technical detail lives in **Settings → Advanced → System Diagnostics**.
 - Selectable LUT lattice size: **17³ / 33³ / 65³**.
 - **Undo / redo** with slider coalescing and `Ctrl/Cmd+Z` / `Shift+Z` / `Y` shortcuts.
 
 ### GPU acceleration
 - One grading pipeline, two interchangeable backends — both consume the same generated LUT, so the maths is never duplicated.
-- **Settings → GPU Acceleration** toggles between the WebGL2 renderer and the CPU renderer. The choice persists in `localStorage` and applies without a page reload.
+- **Settings → Rendering → GPU acceleration** toggles between the WebGL2 renderer and the CPU renderer. The choice persists in `localStorage` and applies without a page reload.
 - **Automatic fallback** when WebGL2 is unavailable, initialisation fails, or the GPU context is lost — the viewer re-mounts onto the CPU renderer, shows a non-intrusive notice, and never goes blank.
 - Switching backends preserves the loaded image, grading values, LUT configuration, zoom / pan and compare mode. A backend switch always re-mounts the canvas, because a canvas that has handed out one context type can never hand out the other.
 - **The image is uploaded to the GPU once.** Grading changes only update the LUT texture, so a 4K still is never re-transferred per slider movement.
-- Settings panel reports the effective status, the adapter string, and the maximum supported texture dimensions.
+- **Settings → Advanced → System Diagnostics** reports GPU acceleration, WebGL2 availability, the effective rendering backend, any CPU-fallback reason, the adapter string, and the maximum supported texture dimensions.
 
 ### Color management
 - Input **log decode**: ACEScct, ARRI LogC3, Sony S-Log3, Panasonic V-Log, RED Log3G10.
@@ -112,7 +122,7 @@ Everything runs client-side. No backend, no API key.
 |   |-- VideoPanel.tsx
 |   |-- AdjustmentsPanel.tsx
 |   |-- ColorManagementPanel.tsx
-|   |-- SettingsPanel.tsx        # GPU acceleration + device information
+|   |-- SettingsDialog.tsx        # Appearance / Rendering / Advanced (System Diagnostics)
 |   |-- TransferEngineSelector.tsx
 |   |-- LutSizeSelector.tsx
 |   |-- ExportMenu.tsx

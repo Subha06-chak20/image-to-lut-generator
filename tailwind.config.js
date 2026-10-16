@@ -47,6 +47,13 @@ export default {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        // Lutcraft's two accents. `brand` is the indigo used on the wordmark,
+        // active states and primary actions; `brand-soft` is the lavender tint
+        // used for hover washes and brand-adjacent highlights.
+        brand: {
+          DEFAULT: 'hsl(var(--brand))',
+          soft: 'hsl(var(--brand-soft))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',

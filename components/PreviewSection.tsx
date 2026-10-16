@@ -765,7 +765,7 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
             {menuOpen && (
               <div
                 data-zoom-menu
-                className="absolute right-0 top-full mt-1 z-50 min-w-[86px] bg-card border border-border rounded-md shadow-lg shadow-black/50 py-1"
+                className="absolute right-0 top-full mt-1 z-50 min-w-[86px] bg-popover border border-border rounded-md shadow-xl shadow-black/20 py-1"
               >
                 <button
                   onClick={() => {
@@ -842,7 +842,7 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
       {/* Viewport */}
       <div
         ref={containerRef}
-        className={`flex-1 relative overflow-hidden bg-zinc-950/50 ${cursor}`}
+        className={`flex-1 relative overflow-hidden bg-zinc-950 ${cursor}`}
         onMouseMove={handleMouseMove}
         onTouchMove={handleTouchMove}
         onMouseDown={handleMouseDown}
@@ -998,9 +998,6 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
           {mode !== 'side' && <span className="text-[9px] font-medium text-white/70">After</span>}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[9px] font-mono text-white/60 bg-black/40 px-1.5 py-0.5 rounded backdrop-blur-sm">
-            {renderMode === 'gpu' ? 'GPU' : 'CPU'} · trilinear
-          </span>
           {resolution && (
             <span className="text-[9px] font-mono text-white/90 bg-black/40 px-2 py-0.5 rounded backdrop-blur-sm">
               {resolution.w} x {resolution.h}
@@ -1010,7 +1007,7 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
       </div>
 
       {isProcessing && (
-        <div className="absolute inset-0 z-30 bg-background/50 backdrop-blur-sm flex items-center justify-center">
+        <div className="absolute inset-0 z-30 bg-black/40 backdrop-blur-sm flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
         </div>
       )}

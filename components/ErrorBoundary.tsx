@@ -1,4 +1,6 @@
 import React from 'react';
+import Wordmark from './Wordmark';
+import { BRAND } from '../services/brand';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -24,7 +26,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
-    console.error('S.CHAK STUDIO crashed:', error, info.componentStack);
+    console.error(`${BRAND.name} crashed:`, error, info.componentStack);
   }
 
   render(): React.ReactNode {
@@ -34,8 +36,9 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     return (
       <div className="min-h-[100dvh] w-full flex items-center justify-center p-8 bg-background text-foreground">
         <div className="max-w-lg w-full rounded-lg border border-border bg-card p-6 space-y-4">
+          <Wordmark size="md" descriptor />
           <div className="flex items-center gap-2">
-            <i className="fa-solid fa-triangle-exclamation text-yellow-500"></i>
+            <i className="fa-solid fa-triangle-exclamation text-amber-500"></i>
             <h1 className="text-sm font-semibold">Something went wrong</h1>
           </div>
           <p className="text-xs text-muted-foreground">

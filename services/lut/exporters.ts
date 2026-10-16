@@ -7,12 +7,13 @@
 
 import { LUT3D } from './types';
 import { sample3D } from './sample';
+import { BRAND } from '../brand';
 
 /* ------------------------------------------------------------------ *
  * 1D .cube (per-channel curve sampled from the 3D LUT)
  * ------------------------------------------------------------------ */
 
-export function toCube1D(lut: LUT3D, size = 1024, title = 'S.CHAK STUDIO 1D'): string {
+export function toCube1D(lut: LUT3D, size = 1024, title: string = `${BRAND.name} 1D`): string {
   const lines: string[] = [`TITLE "${title}"`, `LUT_1D_SIZE ${size}`, ''];
   for (let i = 0; i < size; i++) {
     const v = i / (size - 1);
@@ -48,7 +49,7 @@ export function to3dl(lut: LUT3D): string {
  * CLF (Academy / ASC Common LUT Format v3, LUT3D)
  * ------------------------------------------------------------------ */
 
-export function toClf(lut: LUT3D, title = 'S.CHAK STUDIO'): string {
+export function toClf(lut: LUT3D, title: string = BRAND.name): string {
   const { data, size } = lut;
   const values: string[] = [];
   for (let i = 0; i < size * size * size * 3; i++) {

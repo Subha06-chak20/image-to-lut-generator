@@ -1,15 +1,18 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { generateLUT, getImageStats, applyLUTToImage } from './services/lutGenerator';
 import { buildGradeParams } from './services/gpu/gradeParams';
 import { DEFAULT_LUT_SIZE, LUTSize } from './services/lut/build';
 import { ColorConfig, DEFAULT_COLOR_CONFIG } from './services/grade/colorConfig';
+import { COLOR_SPACES } from './services/color/spaces';
 import { TransferEngineId } from './services/grade/types';
 import { Adjustments, INITIAL_ADJUSTMENTS, Stats } from './types';
+import { BRAND } from './services/brand';
 import { useHistory } from './hooks/useHistory';
+import { useSettings } from './hooks/useSettings';
+import { useTheme } from './hooks/useTheme';
 import Header from './components/Header';
 import Dropzone from './components/Dropzone';
 import PreviewSection, { RenderMode } from './components/PreviewSection';
-import ControlPanel from './components/ControlPanel';
 import GradePanel from './components/GradePanel';
 import ColorManagementPanel from './components/ColorManagementPanel';
 import TransferEngineSelector from './components/TransferEngineSelector';
@@ -18,10 +21,13 @@ import ScopesPanel from './components/ScopesPanel';
 import VideoPanel from './components/VideoPanel';
 import ExportMenu from './components/ExportMenu';
 import LoadingOverlay from './components/LoadingOverlay';
-import SettingsPanel from './components/SettingsPanel';
-import { useSettings } from './hooks/useSettings';
+import SettingsDialog from './components/SettingsDialog';
+import AboutDialog from './components/AboutDialog';
+import Wordmark from './components/Wordmark';
 
 const DEFAULT_SAMPLE_URL = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=1200';
+
+const UNTITLED = 'Untitled Project';
 
 /** The complete, undoable grade state. */
 interface GradeState {
@@ -38,6 +44,10 @@ const INITIAL_GRADE: GradeState = {
   engine: 'reinhard',
 };
 
+/** A file name without its extension, used as the project label. */
+const projectLabelOf = (file: File): string =>
+  file.name.replace(/\.[^.]+$/, '').trim() || UNTITLED;
+
 const App: React.FC = () => {
   const [refImage, setRefImage] = useState<string | null>(null);
   const [sampleImage, setSampleImage] = useState<string>(DEFAULT_SAMPLE_URL);
@@ -49,8 +59,18 @@ const App: React.FC = () => {
   /** The rendered preview, plus a counter that ticks once per finished frame. */
   const [previewCanvas, setPreviewCanvas] = useState<HTMLCanvasElement | null>(null);
   const [gradeVersion, setGradeVersion] = useState(0);
+  /** The working project name shown in the header. */
+  const [projectName, setProjectName] = useState(UNTITLED);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+
+  const refFileRef = useRef<HTMLInputElement>(null);
+  const targetFileRef = useRef<HTMLInputElement>(null);
 
   const [settings, updateSettings] = useSettings();
+  // Keep <html> and the browser chrome in step with the chosen studio theme.
+  useTheme(settings.theme);
+
   // The backend the viewer reports it is really using (falls back on its own).
   // `pending` means the CPU is wanted but is waiting on a baked LUT, so the
   // shell should bake one without any ungraded frame ever being shown.
@@ -98,6 +118,7 @@ const App: React.FC = () => {
   }, []);
 
   const handleRefImageUpload = async (file: File) => {
+    setProjectName(projectLabelOf(file));
     const reader = new FileReader();
     reader.onload = async (e) => {
       const base64 = e.target?.result as string;
@@ -108,6 +129,7 @@ const App: React.FC = () => {
   };
 
   const handleSampleUpload = (file: File) => {
+    setProjectName(projectLabelOf(file));
     if (file.type.startsWith('video/')) {
       setVideoSrc(URL.createObjectURL(file));
       return;
@@ -186,20 +208,18 @@ const App: React.FC = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [undo, redo]);
 
-  const handleDownloadLUT = async () => {
-    // Always bake from the live settings rather than reusing whichever LUT the
-    // renderer last produced, so the exported file can never trail the grade
-    // that is on screen.
-    const lut = await bakeLut();
-    if (!lut) return;
-    const blob = new Blob([lut], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${lutAnalysis?.title.replace(/\s+/g, '_') || 'S_CHAK_STUDIO'}_${lutSize}.cube`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  /**
+   * Exported files are brand-led and carry the project name, so a folder full of
+   * LUTs stays identifiable: `Lutcraft_Portrait_33.cube`.
+   */
+  const exportBaseName = useMemo(() => {
+    const slug = projectName
+      .replace(/[^\w\s-]/g, '')
+      .trim()
+      .replace(/\s+/g, '_');
+    const suffix = slug && slug !== 'Untitled_Project' ? `_${slug}` : '';
+    return `${BRAND.fileSlug}${suffix}_${lutSize}`;
+  }, [projectName, lutSize]);
 
   const handleDownloadImage = async () => {
     if (!sampleImage) return;
@@ -221,7 +241,7 @@ const App: React.FC = () => {
     applyLUTToImage(canvas, img, lut);
 
     const link = document.createElement('a');
-    link.download = `S_CHAK_STUDIO_${Date.now()}.png`;
+    link.download = `${exportBaseName}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
   };
@@ -233,16 +253,77 @@ const App: React.FC = () => {
     setLutData(null);
     setLutAnalysis(null);
     setCurrentStats(null);
+    setProjectName(UNTITLED);
     resetGrade(INITIAL_GRADE);
   };
 
+  const exportSlot = (
+    <ExportMenu
+      resolveLut={bakeLut}
+      canExport={!!currentStats}
+      baseName={exportBaseName}
+      onSaveImage={handleDownloadImage}
+      latticeSize={lutSize}
+      variant="header"
+    />
+  );
+
   return (
-    <div className="h-[100dvh] w-full flex flex-col bg-background overflow-hidden">
-      <Header isProcessing={isProcessing} renderMode={renderer.mode} />
+    <div
+      className="h-[100dvh] w-full flex flex-col bg-background overflow-hidden theme-shell"
+      data-app="lutcraft"
+      data-render-mode={renderer.mode}
+      data-theme={settings.theme}
+    >
+      <Header
+        projectName={projectName}
+        isProcessing={isProcessing}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={undo}
+        onRedo={redo}
+        onImportReference={() => refFileRef.current?.click()}
+        onImportTarget={() => targetFileRef.current?.click()}
+        exportSlot={exportSlot}
+        theme={settings.theme}
+        onToggleTheme={() => updateSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' })}
+        onOpenAbout={() => setAboutOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+
+      {/* Hidden import targets driven by the header's Import menu. */}
+      <input
+        ref={refFileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        aria-hidden="true"
+        tabIndex={-1}
+        data-import="reference"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void handleRefImageUpload(f);
+          e.target.value = '';
+        }}
+      />
+      <input
+        ref={targetFileRef}
+        type="file"
+        accept="image/*,video/*"
+        className="hidden"
+        aria-hidden="true"
+        tabIndex={-1}
+        data-import="target"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleSampleUpload(f);
+          e.target.value = '';
+        }}
+      />
 
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Preview Section - Mobile: Top (40%), Desktop: Right (Flex-1) */}
-        <section className="relative w-full h-[45dvh] md:h-full md:flex-1 bg-zinc-950/50 order-1 md:order-2 border-b md:border-b-0 md:border-l border-border flex flex-col">
+        <section className="relative w-full h-[45dvh] md:h-full md:flex-1 bg-zinc-950 order-1 md:order-2 border-b md:border-b-0 md:border-l border-border flex flex-col">
           <div className="flex-1 min-h-0">
             {videoSrc ? (
               <VideoPanel
@@ -279,8 +360,22 @@ const App: React.FC = () => {
         </section>
 
         {/* Sidebar / Controls - Mobile: Bottom (60%), Desktop: Left (400px) */}
-        <aside className="w-full md:w-[400px] h-[55dvh] md:h-full bg-card flex flex-col order-2 md:order-1 z-10 shadow-xl md:shadow-none">
+        <aside className="w-full md:w-[400px] h-[55dvh] md:h-full bg-background flex flex-col order-2 md:order-1 z-10 shadow-xl md:shadow-none">
           <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide">
+            {/* Empty-workspace welcome — disappears once a look is loaded. */}
+            {!refImage && (
+              <div className="rounded-lg border border-border bg-card/60 p-5 text-center animate-fade-in">
+                <div className="flex justify-center">
+                  <Wordmark size="md" />
+                </div>
+                <p className="mt-3 text-[11px] text-brand italic">{BRAND.tagline}</p>
+                <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                  Import a reference image to extract its look, then grade your target with
+                  wheels, curves and sliders.
+                </p>
+              </div>
+            )}
+
             {/* Input Section */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -295,10 +390,10 @@ const App: React.FC = () => {
 
             {/* Analysis Info */}
             {lutAnalysis && (
-              <div className="px-4 py-3 rounded-md bg-secondary border border-border animate-fade-in">
+              <div className="px-4 py-3 rounded-md bg-card border border-border animate-fade-in">
                 <div className="flex items-center gap-2 mb-1">
-                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-                  <h3 className="text-xs font-semibold text-primary">{lutAnalysis.title}</h3>
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                  <h3 className="text-xs font-semibold text-brand">{lutAnalysis.title}</h3>
                 </div>
                 <p className="text-[11px] text-muted-foreground italic">"{lutAnalysis.description}"</p>
               </div>
@@ -322,13 +417,6 @@ const App: React.FC = () => {
               disabled={!currentStats}
             />
 
-            <SettingsPanel
-              gpuEnabled={settings.gpuAcceleration}
-              onGpuEnabledChange={(enabled) => updateSettings({ gpuAcceleration: enabled })}
-              gpuActive={renderer.mode === 'gpu'}
-              fallbackReason={renderer.fallback}
-            />
-
             <div className="w-full h-px bg-border"></div>
 
             {/* Controls */}
@@ -342,36 +430,67 @@ const App: React.FC = () => {
           </div>
 
           {/* Footer Actions */}
-          <div className="p-4 border-t border-border bg-card">
-            <ControlPanel
-              canExport={!!currentStats}
-              canUndo={canUndo}
-              canRedo={canRedo}
-              onUndo={undo}
-              onRedo={redo}
-              onDownloadLut={handleDownloadLUT}
-              onDownloadImage={handleDownloadImage}
-              onReset={handleReset}
-            />
-
-            <div className="mt-2">
-              <ExportMenu
-                resolveLut={bakeLut}
-                canExport={!!currentStats}
-                baseName={(lutAnalysis?.title.replace(/\s+/g, '_') || 'S_CHAK_STUDIO') + `_${lutSize}`}
-              />
+          <div className="p-4 border-t border-border bg-background space-y-3">
+            <div className="flex items-stretch gap-3">
+              <div className="flex-1">
+                <ExportMenu
+                  resolveLut={bakeLut}
+                  canExport={!!currentStats}
+                  baseName={exportBaseName}
+                  onSaveImage={handleDownloadImage}
+                  latticeSize={lutSize}
+                  variant="footer"
+                />
+              </div>
+              <button
+                onClick={handleReset}
+                title="Clear the images and reset the grade"
+                className="px-4 rounded-md text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors shrink-0"
+              >
+                Reset
+              </button>
             </div>
-
-            <div className="mt-4 flex justify-center">
-              <p className="text-[10px] text-muted-foreground/50">
-                Designed &amp; Built by <a href="https://www.linkedin.com/in/subhadeep-chakraborty-0b8896332/" target="_blank" rel="noreferrer" className="hover:text-primary transition-colors">Subhadeep Chakraborty</a>
-              </p>
-            </div>
+            <p className="text-center text-[10px] text-muted-foreground">
+              {canUndo || canRedo ? 'Ctrl/Cmd+Z to undo · Ctrl/Cmd+Shift+Z to redo' : BRAND.tagline}
+            </p>
           </div>
         </aside>
       </main>
 
+      <footer className="h-7 shrink-0 bg-card border-t border-border px-4 flex items-center justify-between gap-3 text-[10px] text-muted-foreground theme-shell">
+        <span className="flex items-center gap-2 min-w-0">
+          <span className="font-medium text-foreground/80">{BRAND.name}</span>
+          <span className="hidden sm:inline truncate">{BRAND.descriptor}</span>
+        </span>
+        <a
+          href={BRAND.creatorUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="shrink-0 hover:text-brand transition-colors"
+        >
+          {BRAND.creatorCredit}
+        </a>
+      </footer>
+
       <LoadingOverlay isVisible={isProcessing} />
+
+      <SettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        theme={settings.theme}
+        onThemeChange={(theme) => updateSettings({ theme })}
+        gpuEnabled={settings.gpuAcceleration}
+        onGpuEnabledChange={(enabled) => updateSettings({ gpuAcceleration: enabled })}
+        gpuActive={renderer.mode === 'gpu'}
+        fallbackReason={renderer.fallback}
+        context={[
+          { label: 'LUT lattice', value: `${lutSize}³` },
+          { label: 'Transfer engine', value: engine },
+          { label: 'Working space', value: COLOR_SPACES[colorConfig.workingSpace].label },
+        ]}
+      />
+
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   );
 };

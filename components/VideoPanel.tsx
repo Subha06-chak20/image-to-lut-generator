@@ -189,7 +189,7 @@ const VideoPanel: React.FC<VideoPanelProps> = ({ videoSrc, lutData, gradeParams,
       </div>
 
       {/* Transport + filmstrip */}
-      <div className="shrink-0 border-t border-border bg-card/60 p-3 space-y-2">
+      <div className="shrink-0 border-t border-white/10 bg-zinc-950/90 p-3 space-y-2">
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
@@ -198,7 +198,7 @@ const VideoPanel: React.FC<VideoPanelProps> = ({ videoSrc, lutData, gradeParams,
               if (v.paused) void v.play();
               else v.pause();
             }}
-            className="w-7 h-7 rounded-full bg-secondary hover:bg-secondary/80 text-foreground flex items-center justify-center"
+            className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center"
             title="Play / Pause"
           >
             <i className="fa-solid fa-play text-[10px]"></i>
@@ -215,12 +215,12 @@ const VideoPanel: React.FC<VideoPanelProps> = ({ videoSrc, lutData, gradeParams,
             }}
             className="flex-1"
           />
-          <span className="text-[9px] font-mono text-muted-foreground min-w-[48px] text-right">
+          <span className="text-[9px] font-mono text-white/50 min-w-[48px] text-right">
             {formatTime(duration)}
           </span>
           <button
             onClick={handleGrab}
-            className="px-3 py-1.5 rounded-md text-[10px] font-medium bg-primary text-primary-foreground hover:opacity-90"
+            className="px-3 py-1.5 rounded-md text-[10px] font-medium bg-brand text-primary-foreground hover:opacity-90"
             title="Grab current frame as the target still"
           >
             Grab Frame
@@ -235,20 +235,20 @@ const VideoPanel: React.FC<VideoPanelProps> = ({ videoSrc, lutData, gradeParams,
                 const v = videoRef.current;
                 if (v) v.currentTime = t.time;
               }}
-              className="shrink-0 rounded border border-border hover:border-primary overflow-hidden"
+              className="shrink-0 rounded border border-white/15 hover:border-brand overflow-hidden"
               title={formatTime(t.time)}
             >
               <img src={t.url} className="h-12 w-auto" alt="" draggable={false} />
             </button>
           ))}
           {thumbs.length === 0 && !error && (
-            <span className="text-[10px] text-muted-foreground">Reading frames…</span>
+            <span className="text-[10px] text-white/50">Reading frames…</span>
           )}
         </div>
       </div>
 
       {isProcessing && (
-        <div className="absolute inset-0 z-30 bg-background/40 backdrop-blur-sm flex items-center justify-center">
+        <div className="absolute inset-0 z-30 bg-black/40 backdrop-blur-sm flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
         </div>
       )}
