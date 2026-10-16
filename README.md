@@ -8,15 +8,6 @@ Everything runs client-side. No backend, no API key, no telemetry.
 
 ---
 
-## Brand & themes
-
-- **Brand identity & logo**: The custom 3D translucent curved mark and logo lockup are defined in `services/brand.ts` and assetized in `public/mark.png`, `public/logo.png`, and `public/logo-dark.png`. Product identity, wordmark, favicon, page title, loading screen, export surface, About dialog and footer all come from this single source of truth.
-- **Two studio themes**: **Light Studio** (default — warm ivory `#F5F4F0`, pure white `#FFFFFF`, soft grey `#E8E6E0`, charcoal `#252525`) and **Dark Studio**. The choice persists in `localStorage` under `lutcraft.settings.v1`.
-- The **image viewer and scopes keep a dark, neutral surround in both themes** so colour judgement is never biased by the surrounding chrome.
-- The theme is applied pre-paint by an inline script in `index.html`, so a Dark Studio reload never flashes a light background.
-
----
-
 ## Overview
 
 1. Upload a **reference image** to extract color statistics in CIELAB space (mean/std, 3×3 covariance, per-channel CDFs, tonal-region stats).
@@ -75,7 +66,7 @@ Everything runs client-side. No backend, no API key, no telemetry.
 ### Scopes & inspection
 - **Waveform**, **RGB Parade**, **Histogram**, and **Vectorscope** (with skin-tone indicator line).
 - **Multi-source monitoring**: Switch scope source between **Graded**, **Target**, or **Reference** frames. Scopes inspect the native-resolution buffer.
-- **Compare modes**: Interactive **Wipe** divider, **A/B toggle** (hold to view original), and **Side by side**.
+- **Compare modes**: Interactive **Wipe** divider and an **A/B toggle** (hold to view original).
 - **Zoom & Pan**: True 1:1 pixel scaling, zoom presets (50%–400%), fit-to-view, mouse-wheel zooming, and pan drag.
 - **Pixel readout**: Live 8-bit RGB and CIELAB readout under the cursor with `Shift+Click` persistent swatches.
 
