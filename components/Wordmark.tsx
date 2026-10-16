@@ -15,7 +15,7 @@ interface BrandMarkProps {
  */
 export const BrandMark: React.FC<BrandMarkProps> = ({ size = 28, className = '' }) => (
   <img
-    src="/mark.png"
+    src={`${import.meta.env.BASE_URL}mark.png`}
     alt={BRAND.name}
     width={size}
     height={size}
@@ -38,7 +38,7 @@ export interface LogoImageProps {
 export const LogoImage: React.FC<LogoImageProps> = ({ className = '', onDark, height = 36 }) => (
   <>
     <img
-      src="/logo.png"
+      src={`${import.meta.env.BASE_URL}logo.png`}
       alt={`${BRAND.name} — ${BRAND.descriptor}`}
       className={`object-contain select-none ${
         onDark === true ? 'hidden' : onDark === false ? 'inline-block' : 'inline-block dark:hidden'
@@ -47,7 +47,7 @@ export const LogoImage: React.FC<LogoImageProps> = ({ className = '', onDark, he
       draggable={false}
     />
     <img
-      src="/logo-dark.png"
+      src={`${import.meta.env.BASE_URL}logo-dark.png`}
       alt={`${BRAND.name} — ${BRAND.descriptor}`}
       className={`object-contain select-none ${
         onDark === true ? 'inline-block' : onDark === false ? 'hidden' : 'hidden dark:inline-block'
