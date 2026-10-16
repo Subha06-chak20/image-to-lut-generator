@@ -1,6 +1,6 @@
-
 import React, { useState } from 'react';
 import { Adjustments } from '../types';
+import AdjustmentSlider from './AdjustmentSlider';
 
 interface AdjustmentsPanelProps {
   values: Adjustments;
@@ -8,78 +8,42 @@ interface AdjustmentsPanelProps {
   disabled: boolean;
 }
 
+/** The scalar keys — everything a slider can drive. */
+type NumericAdjustmentKey = {
+  [K in keyof Adjustments]-?: Adjustments[K] extends number ? K : never;
+}[keyof Adjustments];
+
 const AdjustmentsPanel: React.FC<AdjustmentsPanelProps> = ({ values, onChange, disabled }) => {
   const [activeTab, setActiveTab] = useState<'tone' | 'color'>('tone');
 
-  const update = (key: keyof Adjustments, val: number, min: number, max: number) => {
-    const clamped = Math.min(max, Math.max(min, val));
-    onChange({ ...values, [key]: clamped });
-  };
-
-  const Slider = ({ label, val, min, max, step, k }: { label: string, val: number, min: number, max: number, step: number, k: keyof Adjustments }) => {
-    // All defaults are now 0
-    const defaultValue = 0;
-    const isModified = Math.abs(val - defaultValue) > 0.001;
-    
-    // Calculate percentage for track fill
-    const percent = ((val - min) / (max - min)) * 100;
-
-    const handleReset = () => {
-      onChange({ ...values, [k]: defaultValue });
-    };
-
-    return (
-      <div className={`space-y-3 ${disabled ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
-        <div className="flex justify-between items-center h-5">
-          <label className="text-[11px] font-medium text-muted-foreground capitalize">
-            {label}
-          </label>
-          
-          <div className="flex items-center gap-2">
-            {/* Reset Button (Only visible when modified) */}
-            <button 
-              onClick={handleReset}
-              className={`text-[10px] text-muted-foreground hover:text-primary transition-all duration-200 ${isModified ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-              title="Reset to default"
-            >
-              <i className="fa-solid fa-rotate-left"></i>
-            </button>
-
-            <span className="text-[10px] font-mono text-foreground bg-secondary px-1.5 py-0.5 rounded min-w-[32px] text-center">
-               {val.toFixed(k === 'intensity' || k === 'exposure' ? 2 : 0)}
-            </span>
-          </div>
-        </div>
-        
-        <div className="relative h-4 flex items-center group">
-          {/* Track Background */}
-          <div className="absolute w-full h-[2px] bg-secondary rounded-full overflow-hidden">
-             {/* Track Fill */}
-             <div 
-               className="h-full bg-primary transition-all duration-75"
-               style={{ width: `${percent}%` }}
-             ></div>
-          </div>
-          
-          <input 
-            type="range" 
-            min={min} 
-            max={max} 
-            step={step} 
-            value={val}
-            onChange={(e) => update(k, parseFloat(e.target.value), min, max)}
-            className="absolute w-full h-full opacity-0 cursor-pointer z-10"
-          />
-          
-          {/* Custom Thumb Visual (follows position) */}
-          <div 
-            className="absolute h-4 w-4 bg-background border-2 border-primary rounded-full shadow-sm pointer-events-none transition-transform group-active:scale-110"
-            style={{ left: `calc(${percent}% - 8px)` }}
-          ></div>
-        </div>
-      </div>
-    );
-  };
+  /**
+   * `AdjustmentSlider` is a module-scope component on purpose. It used to be
+   * declared inside this component, which gave it a fresh identity on every
+   * render: React then remounted the whole slider subtree on the first `input`
+   * event of a drag, tearing out the element the browser was tracking and
+   * killing the gesture after a single step.
+   */
+  const slider = (
+    label: string,
+    k: NumericAdjustmentKey,
+    min: number,
+    max: number,
+    step: number,
+    precision: number,
+  ) => (
+    <AdjustmentSlider
+      label={label}
+      value={values[k]}
+      min={min}
+      max={max}
+      step={step}
+      precision={precision}
+      defaultValue={0}
+      disabled={disabled}
+      onChange={(val) => onChange({ ...values, [k]: val })}
+      onReset={() => onChange({ ...values, [k]: 0 })}
+    />
+  );
 
   return (
     <div className="space-y-6 select-none">
@@ -108,22 +72,22 @@ const AdjustmentsPanel: React.FC<AdjustmentsPanelProps> = ({ values, onChange, d
       <div className="space-y-6 px-1">
         {activeTab === 'tone' ? (
           <>
-            <Slider label="Exposure" val={values.exposure} min={-2} max={2} step={0.05} k="exposure" />
-            <Slider label="Brightness" val={values.brightness} min={-100} max={100} step={1} k="brightness" />
-            <Slider label="Contrast" val={values.contrast} min={-50} max={50} step={1} k="contrast" />
-            <Slider label="Highlights" val={values.highlights} min={-100} max={100} step={1} k="highlights" />
-            <Slider label="Shadows" val={values.shadows} min={-100} max={100} step={1} k="shadows" />
-            <Slider label="Whites" val={values.whites} min={-100} max={100} step={1} k="whites" />
-            <Slider label="Blacks" val={values.blacks} min={-100} max={100} step={1} k="blacks" />
+            {slider('Exposure', 'exposure', -2, 2, 0.05, 2)}
+            {slider('Brightness', 'brightness', -100, 100, 1, 0)}
+            {slider('Contrast', 'contrast', -50, 50, 1, 0)}
+            {slider('Highlights', 'highlights', -100, 100, 1, 0)}
+            {slider('Shadows', 'shadows', -100, 100, 1, 0)}
+            {slider('Whites', 'whites', -100, 100, 1, 0)}
+            {slider('Blacks', 'blacks', -100, 100, 1, 0)}
           </>
         ) : (
           <>
-            <Slider label="Intensity (Mix)" val={values.intensity} min={-1} max={1} step={0.01} k="intensity" />
-            <Slider label="Saturation" val={values.saturation} min={-100} max={100} step={1} k="saturation" />
-            <Slider label="Vibrance" val={values.vibrance} min={-100} max={100} step={1} k="vibrance" />
-            <Slider label="Temperature" val={values.temperature} min={-100} max={100} step={1} k="temperature" />
-            <Slider label="Tint" val={values.tint} min={-100} max={100} step={1} k="tint" />
-            <Slider label="Hue" val={values.hue} min={-180} max={180} step={1} k="hue" />
+            {slider('Intensity (Mix)', 'intensity', -1, 1, 0.01, 2)}
+            {slider('Saturation', 'saturation', -100, 100, 1, 0)}
+            {slider('Vibrance', 'vibrance', -100, 100, 1, 0)}
+            {slider('Temperature', 'temperature', -100, 100, 1, 0)}
+            {slider('Tint', 'tint', -100, 100, 1, 0)}
+            {slider('Hue', 'hue', -180, 180, 1, 0)}
           </>
         )}
       </div>
