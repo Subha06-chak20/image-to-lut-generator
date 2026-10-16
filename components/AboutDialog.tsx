@@ -13,7 +13,7 @@ interface AboutDialogProps {
 const CAPABILITIES = [
   { icon: 'fa-circle-half-stroke', label: 'Precision colour wheels' },
   { icon: 'fa-chart-line', label: 'Curves & sliders' },
-  { icon: 'fa-eye', label: 'Wipe & side-by-side' },
+  { icon: 'fa-eye', label: 'Wipe & A/B compare' },
   { icon: 'fa-wave-square', label: 'Waveform · parade · vectorscope' },
   { icon: 'fa-cube', label: '3D LUT generation' },
   { icon: 'fa-file-export', label: '.CUBE / .3DL / CLF / HALD export' },

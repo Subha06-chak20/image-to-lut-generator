@@ -30,7 +30,7 @@ interface PreviewSectionProps {
   onRender?: (canvas: HTMLCanvasElement | null, version: number) => void;
 }
 
-type CompareMode = 'wipe' | 'toggle' | 'side';
+type CompareMode = 'wipe' | 'toggle';
 
 interface Readout {
   x: number;
@@ -691,7 +691,7 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
   const handleMouseMove = (e: React.MouseEvent) => {
     if (panSessionRef.current) return;
     if (isDragging && mode === 'wipe') handleMove(e.clientX);
-    if (mode !== 'side') probe(e.clientX, e.clientY);
+    probe(e.clientX, e.clientY);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -815,7 +815,6 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
         {([
           { id: 'wipe', icon: 'fa-left-right', title: 'Wipe' },
           { id: 'toggle', icon: 'fa-eye', title: 'A/B' },
-          { id: 'side', icon: 'fa-table-columns', title: 'Side by side' },
         ] as { id: CompareMode; icon: string; title: string }[]).map((m) => (
           <button
             key={m.id}
@@ -872,73 +871,48 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
           alt=""
         />
 
-        {mode === 'side' ? (
-          // Two independent panes that share the same zoom and pan, so both
-          // sides always show the same region for a fair A/B comparison.
-          <div className="absolute inset-0 flex">
-            <div className="relative flex-1 overflow-hidden flex items-center justify-center">
-              <div className={stageClasses} style={stageStyle}>
-                <img
-                  ref={displayImgRef}
-                  src={sampleImage}
-                  className={imageClasses}
-                  draggable={false}
-                  alt="Original"
-                />
-              </div>
-            </div>
-            <div className="relative flex-1 overflow-hidden flex items-center justify-center">
-              <div className={stageClasses} style={stageStyle}>
-                <canvas key={canvasKey} ref={canvasRef} className={imageClasses} />
-              </div>
+        {/* Before — always fully visible */}
+        <div className={stageClasses} style={stageStyle}>
+          <img
+            ref={displayImgRef}
+            src={sampleImage}
+            className={imageClasses}
+            draggable={false}
+            alt="Original"
+          />
+        </div>
+
+        {/* After — clipped to the wipe position, sharing the same transform */}
+        <div
+          className="absolute inset-0"
+          style={{
+            clipPath:
+              mode === 'wipe'
+                ? `inset(0 0 0 ${sliderPos}%)`
+                : showOriginal
+                  ? 'inset(0 0 0 100%)'
+                  : 'none',
+          }}
+        >
+          <div className={stageClasses} style={stageStyle}>
+            <canvas key={canvasKey} ref={canvasRef} className={imageClasses} />
+          </div>
+        </div>
+
+        {mode === 'wipe' && (
+          <div
+            className="absolute top-0 bottom-0 w-0.5 bg-white/50 backdrop-blur-sm z-20 pointer-events-none"
+            style={{ left: `${sliderPos}%` }}
+          >
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center">
+              <i className="fa-solid fa-left-right text-xs text-black"></i>
             </div>
           </div>
-        ) : (
-          <>
-            {/* Before — always fully visible */}
-            <div className={stageClasses} style={stageStyle}>
-              <img
-                ref={displayImgRef}
-                src={sampleImage}
-                className={imageClasses}
-                draggable={false}
-                alt="Original"
-              />
-            </div>
-
-            {/* After — clipped to the wipe position, sharing the same transform */}
-            <div
-              className="absolute inset-0"
-              style={{
-                clipPath:
-                  mode === 'wipe'
-                    ? `inset(0 0 0 ${sliderPos}%)`
-                    : showOriginal
-                      ? 'inset(0 0 0 100%)'
-                      : 'none',
-              }}
-            >
-              <div className={stageClasses} style={stageStyle}>
-                <canvas key={canvasKey} ref={canvasRef} className={imageClasses} />
-              </div>
-            </div>
-
-            {mode === 'wipe' && (
-              <div
-                className="absolute top-0 bottom-0 w-0.5 bg-white/50 backdrop-blur-sm z-20 pointer-events-none"
-                style={{ left: `${sliderPos}%` }}
-              >
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center">
-                  <i className="fa-solid fa-left-right text-xs text-black"></i>
-                </div>
-              </div>
-            )}
-          </>
         )}
       </div>
 
       {/* Pixel readout */}
-      {readout && mode !== 'side' && (
+      {readout && (
         <div className="absolute bottom-10 left-3 z-40 bg-black/70 backdrop-blur-sm rounded-md border border-white/10 px-3 py-2 space-y-1 pointer-events-none">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded border border-white/20" style={{ background: toHex(readout.graded) }}></div>
@@ -992,10 +966,8 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
       {/* Info Bar */}
       <div className="h-8 absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent flex items-end justify-between px-4 pb-2 pointer-events-none">
         <div className="flex gap-4">
-          <span className="text-[9px] font-medium text-white/70">
-            {mode === 'side' ? 'Original | Graded' : 'Before'}
-          </span>
-          {mode !== 'side' && <span className="text-[9px] font-medium text-white/70">After</span>}
+          <span className="text-[9px] font-medium text-white/70">Before</span>
+          <span className="text-[9px] font-medium text-white/70">After</span>
         </div>
         <div className="flex items-center gap-2">
           {resolution && (
