@@ -6,9 +6,10 @@ interface DropzoneProps {
   currentImage: string | null;
   icon: string;
   compact?: boolean;
+  accept?: string;
 }
 
-const Dropzone: React.FC<DropzoneProps> = ({ onUpload, currentImage, icon, compact }) => {
+const Dropzone: React.FC<DropzoneProps> = ({ onUpload, currentImage, icon, compact, accept = 'image/*' }) => {
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDrag = (e: React.DragEvent) => {
@@ -37,7 +38,7 @@ const Dropzone: React.FC<DropzoneProps> = ({ onUpload, currentImage, icon, compa
       onClick={() => {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = 'image/*';
+        input.accept = accept;
         input.onchange = (e) => {
           const file = (e.target as HTMLInputElement).files?.[0];
           if (file) onUpload(file);
