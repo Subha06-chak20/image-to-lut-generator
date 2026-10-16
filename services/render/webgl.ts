@@ -1,43 +1,22 @@
 /**
- * WebGL2 LUT renderer.
+ * WebGL2 grade renderer.
  *
- * Uploads the image plus a 3D LUT (RGBA16F — filterable, so hardware does the
- * trilinear interpolation) and draws the graded image with a fullscreen quad.
- * Falls back to the CPU path in `lutGenerator` when WebGL2 is unavailable.
+ * Uploads the source image once, then grades it on the GPU in one of two modes:
+ *
+ *   LUT mode    a baked 3D LUT (RGBA16F — filterable, so hardware does the
+ *               trilinear interpolation). This is the CPU-parity path and what
+ *               the exported `.cube` reproduces exactly.
+ *   Param mode  the grade evaluated directly from uniforms, so moving a slider
+ *               costs a few uniform writes instead of a full lattice bake.
+ *
+ * Both modes share the context, the quad and the image texture, so switching
+ * between them never re-uploads the source. Falls back to the CPU path in
+ * `lutGenerator` when WebGL2 is unavailable.
  */
 
+import { GradeParams, CURVE_ROWS, CURVE_SIZE, INVCDF_ROWS, INVCDF_SIZE } from '../gpu/gradeParams';
 import { LUT3D, ParsedLUT } from '../lut/types';
-
-const VERT = `#version 300 es
-in vec2 aPos;
-out vec2 vUv;
-void main() {
-  vUv = aPos * 0.5 + 0.5;
-  gl_Position = vec4(aPos, 0.0, 1.0);
-}`;
-
-// NOTE: GLSL ES 3.00 has NO default precision for `sampler3D` (only
-// `sampler2D` / `samplerCube`), so every sampler must be explicitly qualified
-// or the shader fails to compile. `highp` also avoids low-precision sampling
-// that would reintroduce banding.
-const FRAG = `#version 300 es
-precision highp float;
-precision highp int;
-uniform highp sampler2D uImage;
-uniform highp sampler3D uLut;
-uniform float uLutSize;
-uniform float uStrength;
-uniform float uMix;      // 0 = original, 1 = graded
-in vec2 vUv;
-out vec4 fragColor;
-
-void main() {
-  vec3 c = clamp(texture(uImage, vUv).rgb, 0.0, 1.0);
-  float scale = (uLutSize - 1.0) / uLutSize;
-  float offset = 0.5 / uLutSize;
-  vec3 graded = texture(uLut, c * scale + offset).rgb;
-  fragColor = vec4(mix(c, graded, uStrength * uMix), 1.0);
-}`;
+import { FRAG, VERT } from './shaders';
 
 function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
   const shader = gl.createShader(type)!;
@@ -51,6 +30,18 @@ function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLSh
   return shader;
 }
 
+/** A 1x1 opaque RGBA16F texel, so the curve samplers are always complete. */
+function createUnitTexture(gl: WebGL2RenderingContext): WebGLTexture {
+  const tex = gl.createTexture()!;
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, 1, 1, 0, gl.RGBA, gl.FLOAT, new Float32Array([1, 1, 1, 1]));
+  return tex;
+}
+
 export class LUTRenderer {
   private gl: WebGL2RenderingContext;
   private program: WebGLProgram;
@@ -58,16 +49,16 @@ export class LUTRenderer {
   private vbo: WebGLBuffer;
   private imageTex: WebGLTexture;
   private lutTex: WebGLTexture;
-  private uImage: WebGLUniformLocation | null;
-  private uLut: WebGLUniformLocation | null;
-  private uLutSize: WebGLUniformLocation | null;
-  private uStrength: WebGLUniformLocation | null;
-  private uMix: WebGLUniformLocation | null;
+  private curveTex: WebGLTexture;
+  private invCdfTex: WebGLTexture;
+  private uniformCache = new Map<string, WebGLUniformLocation | null>();
   private hasImage = false;
   private hasLut = false;
   private lutSize = 2;
   private strength = 1;
   private mix = 1;
+  /** Non-null while the parameterised grade path is active. */
+  private params: GradeParams | null = null;
   private disposed = false;
   private contextLost = false;
 
@@ -140,15 +131,19 @@ export class LUTRenderer {
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-    gl.useProgram(program);
-    this.uImage = gl.getUniformLocation(program, 'uImage');
-    this.uLut = gl.getUniformLocation(program, 'uLut');
-    this.uLutSize = gl.getUniformLocation(program, 'uLutSize');
-    this.uStrength = gl.getUniformLocation(program, 'uStrength');
-    this.uMix = gl.getUniformLocation(program, 'uMix');
+    this.curveTex = createUnitTexture(gl);
+    this.invCdfTex = createUnitTexture(gl);
 
+    gl.useProgram(program);
     canvas.addEventListener('webglcontextlost', this.handleContextLost, false);
     canvas.addEventListener('webglcontextrestored', this.handleContextRestored, false);
+  }
+
+  private uniform(name: string): WebGLUniformLocation | null {
+    if (!this.uniformCache.has(name)) {
+      this.uniformCache.set(name, this.gl.getUniformLocation(this.program, name));
+    }
+    return this.uniformCache.get(name) ?? null;
   }
 
   private static supportChecked: boolean | null = null;
@@ -158,6 +153,9 @@ export class LUTRenderer {
    * throwaway canvas. This matters: `getContext('webgl2')` can succeed while
    * the shaders still fail to compile, and a canvas that has been bound to a
    * WebGL context can never hand out a 2D context afterwards.
+   *
+   * It also compiles the full grade shader, so a backend that only passes the
+   * context check is never assumed usable.
    */
   static isSupported(): boolean {
     if (LUTRenderer.supportChecked !== null) return LUTRenderer.supportChecked;
@@ -194,7 +192,7 @@ export class LUTRenderer {
     this.hasImage = true;
   }
 
-  /** Upload a 3D LUT as a filterable RGBA16F 3D texture. */
+  /** Upload a 3D LUT as a filterable RGBA16F 3D texture (LUT mode). */
   setLUT(lut: ParsedLUT | null): void {
     if (!lut || lut.dimension !== 3) {
       this.hasLut = false;
@@ -226,6 +224,110 @@ export class LUTRenderer {
     );
     this.lutSize = n;
     this.hasLut = true;
+    this.params = null;
+  }
+
+  /**
+   * Switch to the parameterised grade path. Passing `null` reverts to LUT mode.
+   *
+   * This is the whole point of the parameter path: the per-slider cost is two
+   * small table uploads (curves + inverse CDF) and a handful of uniforms, with
+   * no N³ lattice evaluation anywhere.
+   */
+  setGradeParams(params: GradeParams | null): void {
+    this.params = params;
+    if (params) this.uploadGradeParams(params);
+    this.render();
+  }
+
+  private uploadGradeParams(p: GradeParams): void {
+    const { gl } = this;
+    gl.useProgram(this.program);
+
+    const f = (name: string, v: number) => gl.uniform1f(this.uniform(name), v);
+    const i = (name: string, v: number) => gl.uniform1i(this.uniform(name), v);
+    const v3 = (name: string, v: readonly number[]) =>
+      gl.uniform3f(this.uniform(name), v[0], v[1], v[2]);
+    /** Upload one row of a row-major 3x3 as a vec3 (see `mulMat` in the shader). */
+    const row = (name: string, m: readonly number[], r: number) =>
+      gl.uniform3f(this.uniform(name), m[r * 3], m[r * 3 + 1], m[r * 3 + 2]);
+
+    i('uMode', 1);
+    i('uCmEnabled', p.cmEnabled ? 1 : 0);
+    i('uTonemap', p.tonemap ? 1 : 0);
+    i('uInputLog', p.inputLog);
+    i('uInputSpace', p.inputSpace);
+    i('uWorkingSpace', p.workingSpace);
+    i('uOutputSpace', p.outputSpace);
+    row('uLinMat0', p.linearMat, 0);
+    row('uLinMat1', p.linearMat, 1);
+    row('uLinMat2', p.linearMat, 2);
+
+    i('uEngine', p.engine);
+    f('uTransferMix', p.transferMix);
+    v3('uReinhardScale', p.reinhardScale);
+    v3('uReinhardBias', p.reinhardBias);
+    row('uMkMat0', p.mkMat, 0);
+    row('uMkMat1', p.mkMat, 1);
+    row('uMkMat2', p.mkMat, 2);
+    v3('uMkOffset', p.mkOffset);
+    v3('uRegionScale0', p.regionScale.slice(0, 3));
+    v3('uRegionScale1', p.regionScale.slice(3, 6));
+    v3('uRegionScale2', p.regionScale.slice(6, 9));
+    v3('uRegionBias0', p.regionBias.slice(0, 3));
+    v3('uRegionBias1', p.regionBias.slice(3, 6));
+    v3('uRegionBias2', p.regionBias.slice(6, 9));
+
+    f('uExposure', p.exposure);
+    f('uBrightness', p.brightness);
+    f('uContrast', p.contrast);
+    f('uSaturation', p.saturation);
+    f('uVibrance', p.vibrance);
+    f('uHue', p.hue);
+    gl.uniform4f(this.uniform('uTonal'), p.tonal[0], p.tonal[1], p.tonal[2], p.tonal[3]);
+    i('uLogWheels', p.logWheels ? 1 : 0);
+    i('uWheelsActive', p.wheelsActive ? 1 : 0);
+    i('uCurvesActive', p.curvesActive ? 1 : 0);
+    i('uCurveMask', p.curveMask);
+    i('uHueCurvesActive', p.hueCurvesActive ? 1 : 0);
+    v3('uWheelLift', p.wheelLift);
+    v3('uWheelGamma', p.wheelGamma);
+    v3('uWheelGain', p.wheelGain);
+    v3('uWheelOffset', p.wheelOffset);
+
+    // Operation order: an int array indexed by the loop in applyAdjustShader.
+    // `getUniformLocation` with the bare name resolves to element 0, so the
+    // whole array is written with a single call.
+    gl.uniform1i(this.uniform('uOpCount'), p.opCount);
+    gl.uniform1iv(this.uniform('uOpOrder'), new Int32Array(p.opOrder));
+
+    // Curves + inverse CDF as filterable half-float 2D tables.
+    gl.bindTexture(gl.TEXTURE_2D, this.curveTex);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA16F,
+      CURVE_SIZE,
+      CURVE_ROWS,
+      0,
+      gl.RGBA,
+      gl.FLOAT,
+      p.curves,
+    );
+
+    gl.bindTexture(gl.TEXTURE_2D, this.invCdfTex);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA16F,
+      INVCDF_SIZE,
+      INVCDF_ROWS,
+      0,
+      gl.RGBA,
+      gl.FLOAT,
+      p.invCdf,
+    );
   }
 
   /** Overall LUT strength (0..1). */
@@ -251,16 +353,27 @@ export class LUTRenderer {
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.imageTex);
-    gl.uniform1i(this.uImage, 0);
+    gl.uniform1i(this.uniform('uImage'), 0);
 
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_3D, this.lutTex);
-    gl.uniform1i(this.uLut, 1);
+    if (this.params) {
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, this.curveTex);
+      gl.uniform1i(this.uniform('uCurves'), 2);
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, this.invCdfTex);
+      gl.uniform1i(this.uniform('uInvCdf'), 3);
+      gl.uniform1i(this.uniform('uMode'), 1);
+    } else {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_3D, this.lutTex);
+      gl.uniform1i(this.uniform('uLut'), 1);
+      gl.uniform1i(this.uniform('uMode'), 0);
+    }
 
     // If there is no LUT, the sample still needs a valid size uniform.
-    gl.uniform1f(this.uLutSize, this.hasLut ? this.lutSize : 2);
-    gl.uniform1f(this.uStrength, this.hasLut ? this.strength : 0);
-    gl.uniform1f(this.uMix, this.mix);
+    gl.uniform1f(this.uniform('uLutSize'), this.hasLut ? this.lutSize : 2);
+    gl.uniform1f(this.uniform('uStrength'), this.hasLut || this.params ? this.strength : 0);
+    gl.uniform1f(this.uniform('uMix'), this.mix);
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
@@ -277,6 +390,8 @@ export class LUTRenderer {
     if (gl.isContextLost()) return;
     gl.deleteTexture(this.imageTex);
     gl.deleteTexture(this.lutTex);
+    gl.deleteTexture(this.curveTex);
+    gl.deleteTexture(this.invCdfTex);
     gl.deleteBuffer(this.vbo);
     gl.deleteVertexArray(this.vao);
     gl.deleteProgram(this.program);

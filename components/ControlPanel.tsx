@@ -1,7 +1,8 @@
 import React from 'react';
 
 interface ControlPanelProps {
-  hasLut: boolean;
+  /** Whether a grade exists to export. No baked LUT is required any more. */
+  canExport: boolean;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -12,7 +13,7 @@ interface ControlPanelProps {
 }
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
-  hasLut,
+  canExport,
   canUndo,
   canRedo,
   onUndo,
@@ -40,10 +41,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       {/* Export controls */}
       <div className="flex flex-col md:flex-row gap-3">
         <button
-          disabled={!hasLut}
+          disabled={!canExport}
           onClick={onDownloadLut}
           className={`py-2.5 rounded-md text-xs font-medium flex items-center justify-center gap-2 transition-all md:flex-1
-            ${hasLut
+            ${canExport
               ? 'bg-primary text-primary-foreground hover:opacity-90 shadow-md'
               : 'bg-muted text-muted-foreground cursor-not-allowed'}
           `}
@@ -54,10 +55,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 
         <div className="flex w-full gap-3 md:contents">
           <button
-            disabled={!hasLut}
+            disabled={!canExport}
             onClick={onDownloadImage}
             className={`py-2.5 rounded-md text-xs font-medium flex items-center justify-center gap-2 transition-all flex-[65] md:flex-1
-              ${hasLut
+              ${canExport
                 ? 'bg-secondary text-foreground hover:bg-secondary/80 border border-border'
                 : 'bg-muted text-muted-foreground cursor-not-allowed'}
             `}

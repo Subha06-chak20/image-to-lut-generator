@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { applyLUTToImage } from '../services/lutGenerator';
 import { loadLUT } from '../services/lut/load';
-import { sampleLUT } from '../services/lut/sample';
 import { rgbToLab } from '../services/color/conversions';
+import { GradeParams } from '../services/gpu/gradeParams';
 import { LUTRenderer } from '../services/render/webgl';
 import { LAB, RGB } from '../types';
 
@@ -11,11 +11,23 @@ export type RenderMode = 'gpu' | 'cpu';
 interface PreviewSectionProps {
   sampleImage: string;
   lutData: string | null;
+  /**
+   * The grade as shader uniforms. When present the GPU backend evaluates the
+   * grade directly and `lutData` is not consulted at all; when absent it falls
+   * back to sampling the baked LUT, so both paths stay available.
+   */
+  gradeParams?: GradeParams | null;
   isProcessing: boolean;
   /** User preference: run the WebGL2 pipeline when the browser allows it. */
   gpuEnabled?: boolean;
   /** Reports which backend is actually painting, and why it fell back. */
-  onRendererChange?: (state: { mode: RenderMode; fallback: string | null }) => void;
+  onRendererChange?: (state: { mode: RenderMode; fallback: string | null; pending: boolean }) => void;
+  /**
+   * Called after every committed render with the preview canvas and a version
+   * counter. The scopes consume this instead of a baked LUT, so nothing has to
+   * be baked on the GPU parameter path just to keep them live.
+   */
+  onRender?: (canvas: HTMLCanvasElement | null, version: number) => void;
 }
 
 type CompareMode = 'wipe' | 'toggle' | 'side';
@@ -114,9 +126,11 @@ const clampPan = (
 const PreviewSection: React.FC<PreviewSectionProps> = ({
   sampleImage,
   lutData,
+  gradeParams,
   isProcessing,
   gpuEnabled = true,
   onRendererChange,
+  onRender,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -124,6 +138,19 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
   const displayImgRef = useRef<HTMLImageElement>(null);
   const probeRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<LUTRenderer | null>(null);
+
+  // Kept in refs so the render effects never need `onRender` in their deps.
+  const onRenderRef = useRef(onRender);
+  const renderVersionRef = useRef(0);
+  useEffect(() => {
+    onRenderRef.current = onRender;
+  }, [onRender]);
+
+  /** Announce a finished frame so downstream consumers can re-read the canvas. */
+  const commitRender = useCallback(() => {
+    renderVersionRef.current += 1;
+    onRenderRef.current?.(canvasRef.current, renderVersionRef.current);
+  }, []);
 
   const gpuSupported = useMemo(() => LUTRenderer.isSupported(), []);
   /** Keeps us on the CPU until the user retries; see the toast below. */
@@ -249,19 +276,27 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
   }, [gpuEnabled, gpuSupported]);
 
   // Fall back to the CPU path when the GPU is unavailable, disabled, or dies.
+  //
+  // A canvas bound to one context type can never hand out the other, so a
+  // backend switch always needs a fresh element. Switching to the CPU also needs
+  // a baked LUT — but the GPU frame already on screen is correct, so we hold the
+  // switch until the lattice arrives rather than remounting into an ungraded
+  // flash. `pending` tells the shell to bake for us in the meantime.
+  const wantedMode: RenderMode = gpuEnabled && gpuSupported && !gpuFailure ? 'gpu' : 'cpu';
+  const cpuPending =
+    wantedMode === 'cpu' && renderMode === 'gpu' && !!gradeParams && !lutData;
+
   useEffect(() => {
-    const wanted: RenderMode = gpuEnabled && gpuSupported && !gpuFailure ? 'gpu' : 'cpu';
-    if (wanted === renderMode) return;
-    // A canvas bound to one context type can never hand out the other, so a
-    // backend switch always needs a fresh element.
-    setRenderMode(wanted);
+    if (wantedMode === renderMode) return;
+    if (cpuPending) return;
+    setRenderMode(wantedMode);
     setCanvasKey((k) => k + 1);
-  }, [gpuEnabled, gpuSupported, gpuFailure, renderMode]);
+  }, [wantedMode, renderMode, cpuPending]);
 
   // Surface the effective backend (and any fallback) to the shell.
   useEffect(() => {
-    onRendererChange?.({ mode: renderMode, fallback: gpuFailure });
-  }, [renderMode, gpuFailure, onRendererChange]);
+    onRendererChange?.({ mode: renderMode, fallback: gpuFailure, pending: cpuPending });
+  }, [renderMode, gpuFailure, cpuPending, onRendererChange]);
 
   // Tear the old renderer down whenever the canvas is replaced or the backend
   // changes. React runs this cleanup before the mount effects of the same
@@ -316,29 +351,34 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
     if (!renderer) return;
     renderer.setImage(img, img.naturalWidth, img.naturalHeight);
     renderer.render();
-  }, [sampleImage, imageToken, renderMode, canvasKey, failGpu]);
+    commitRender();
+  }, [sampleImage, imageToken, renderMode, canvasKey, failGpu, commitRender]);
 
-  // Grade application — cheap on the GPU (uniform/texture update) and a full
-  // re-composite on the CPU.
+  // Grade application — a handful of uniform writes on the GPU parameter path,
+  // a single LUT sample on the GPU LUT path, and a full re-composite on the CPU.
   useEffect(() => {
     const img = sampleImgRef.current;
     const canvas = canvasRef.current;
     if (!img || !canvas || !img.naturalWidth || !imageToken) return;
 
-    const parsed = loadLUT(lutData);
-
     if (renderMode === 'gpu') {
       const renderer = rendererRef.current;
       if (!renderer) return; // the upload effect owns construction
-      renderer.setLUT(parsed);
-      renderer.render();
+      if (gradeParams) {
+        renderer.setGradeParams(gradeParams);
+      } else {
+        renderer.setLUT(loadLUT(lutData));
+        renderer.render();
+      }
+      commitRender();
       return;
     }
 
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
-    applyLUTToImage(canvas, img, parsed);
-  }, [lutData, imageToken, renderMode, canvasKey]);
+    applyLUTToImage(canvas, img, loadLUT(lutData));
+    commitRender();
+  }, [lutData, gradeParams, imageToken, renderMode, canvasKey, commitRender]);
 
   /* ---------------- fit measurement ---------------- */
 
@@ -603,18 +643,32 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
       if (!pctx) return;
 
       let orig: RGB;
+      let graded: RGB;
       try {
         pctx.clearRect(0, 0, 1, 1);
         pctx.drawImage(source, px, py, 1, 1, 0, 0, 1, 1);
         const d = pctx.getImageData(0, 0, 1, 1).data;
         orig = { r: d[0] / 255, g: d[1] / 255, b: d[2] / 255 };
+
+        // The graded value is read straight off the rendered preview, so the
+        // readout matches the pixels actually on screen for any backend — and
+        // needs no baked LUT to be available.
+        graded = orig;
+        const gradedCanvas = canvasRef.current;
+        if (
+          gradedCanvas &&
+          gradedCanvas.width === source.naturalWidth &&
+          gradedCanvas.height === source.naturalHeight
+        ) {
+          pctx.clearRect(0, 0, 1, 1);
+          pctx.drawImage(gradedCanvas, px, py, 1, 1, 0, 0, 1, 1);
+          const gd = pctx.getImageData(0, 0, 1, 1).data;
+          graded = { r: gd[0] / 255, g: gd[1] / 255, b: gd[2] / 255 };
+        }
       } catch {
         setReadout(null);
         return;
       }
-
-      const parsed = loadLUT(lutData);
-      const graded = parsed ? sampleLUT(parsed, orig) : orig;
 
       setReadout({
         x: px,
@@ -625,7 +679,7 @@ const PreviewSection: React.FC<PreviewSectionProps> = ({
         gradedLab: rgbToLab(graded),
       });
     },
-    [lutData],
+    [],
   );
 
   const pinSwatch = useCallback(() => {

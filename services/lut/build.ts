@@ -15,6 +15,17 @@ export const DEFAULT_LUT_SIZE: LUTSize = 33;
 /**
  * Evaluate a color function across an N^3 identity lattice and return a 3D LUT.
  * Red varies fastest, matching the `.cube` convention.
+ *
+ * Outputs are deliberately NOT clamped. An affine colour transfer is unbounded,
+ * so the lattice corners (which sit far outside any real image's gamut) can
+ * evaluate to -4 or +3. Clamping the lattice would:
+ *   - make the CPU renderer diverge from the GPU parameter path, which evaluates
+ *     the pipeline per pixel and only clamps at the 8-bit output, and
+ *   - introduce a kink that stops the trilinear approximation converging as the
+ *     lattice is refined.
+ * Out-of-range values are legal in `.cube`/`.3dl`/CLF and every consumer clamps
+ * at output, exactly as this app's own 8-bit path does — so the lattice stays a
+ * faithful sample of the pipeline and the export reproduces the render.
  */
 export function buildLUT3D(
   size: number,

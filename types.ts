@@ -110,6 +110,43 @@ export const NEUTRAL_CURVES: CurveSet = { master: [], r: [], g: [], b: [] };
 
 export const NEUTRAL_HUE_CURVES: HueCurves = { hueVsHue: [], hueVsSat: [], lumVsSat: [] };
 
+/**
+ * The individual operations that make up a grade, in the order they are applied
+ * by default.
+ *
+ * They are named rather than positional so a grade can carry its own order: the
+ * pipeline is a dispatch over this list, so the same operation can run before or
+ * after any other without the maths changing shape. `applyAdjust` and the GPU
+ * shader both iterate the order, which is what keeps the two backends in step.
+ */
+export type GradeOpId =
+  | 'exposure'
+  | 'brightness'
+  | 'contrast'
+  | 'tonal'
+  | 'wheels'
+  | 'curves'
+  | 'hueCurves'
+  | 'saturation'
+  | 'hue';
+
+/**
+ * The canonical order, chosen to match how the controls were introduced:
+ * expose, set the black/white points, then shape with the wheels and curves,
+ * then adjust overall colour, and finally rotate hue.
+ */
+export const DEFAULT_OP_ORDER: readonly GradeOpId[] = [
+  'exposure',
+  'brightness',
+  'contrast',
+  'tonal',
+  'wheels',
+  'curves',
+  'hueCurves',
+  'saturation',
+  'hue',
+];
+
 export interface Adjustments {
   exposure: number;
   intensity: number;
@@ -132,6 +169,8 @@ export interface Adjustments {
   hueCurves?: HueCurves;
   /** Run lift/gamma/gain in a log (ACEScct) domain instead of the working space. */
   logWheels?: boolean;
+  /** Order in which the operations above are applied. Missing ops are appended. */
+  opOrder?: GradeOpId[];
 }
 
 export const INITIAL_ADJUSTMENTS: Adjustments = {
@@ -152,4 +191,5 @@ export const INITIAL_ADJUSTMENTS: Adjustments = {
   curves: NEUTRAL_CURVES,
   hueCurves: NEUTRAL_HUE_CURVES,
   logWheels: false,
+  opOrder: [...DEFAULT_OP_ORDER],
 };

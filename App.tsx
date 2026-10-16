@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { generateLUT, getImageStats, applyLUTToImage } from './services/lutGenerator';
+import { buildGradeParams } from './services/gpu/gradeParams';
 import { DEFAULT_LUT_SIZE, LUTSize } from './services/lut/build';
 import { ColorConfig, DEFAULT_COLOR_CONFIG } from './services/grade/colorConfig';
 import { TransferEngineId } from './services/grade/types';
@@ -45,15 +46,21 @@ const App: React.FC = () => {
   const [lutAnalysis, setLutAnalysis] = useState<{ title: string; description: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentStats, setCurrentStats] = useState<Stats | null>(null);
+  /** The rendered preview, plus a counter that ticks once per finished frame. */
+  const [previewCanvas, setPreviewCanvas] = useState<HTMLCanvasElement | null>(null);
+  const [gradeVersion, setGradeVersion] = useState(0);
 
   const [settings, updateSettings] = useSettings();
   // The backend the viewer reports it is really using (falls back on its own).
-  const [renderer, setRenderer] = useState<{ mode: RenderMode; fallback: string | null }>({
-    mode: 'cpu',
+  // `pending` means the CPU is wanted but is waiting on a baked LUT, so the
+  // shell should bake one without any ungraded frame ever being shown.
+  const [renderer, setRenderer] = useState<{ mode: RenderMode; fallback: string | null; pending: boolean }>({
+    mode: settings.gpuAcceleration ? 'gpu' : 'cpu',
     fallback: null,
+    pending: false,
   });
   const handleRendererChange = useCallback(
-    (next: { mode: RenderMode; fallback: string | null }) => setRenderer(next),
+    (next: { mode: RenderMode; fallback: string | null; pending: boolean }) => setRenderer(next),
     [],
   );
 
@@ -114,15 +121,51 @@ const App: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
+  /*
+   * The grade as shader uniforms. Building this costs a handful of scalar and
+   * matrix derivations plus two small 1D tables (both memoised), so it is cheap
+   * enough to recompute on every slider move.
+   */
+  const gradeParams = useMemo(
+    () =>
+      currentStats ? buildGradeParams(currentStats, adjustments, colorConfig, engine) : null,
+    [currentStats, adjustments, colorConfig, engine],
+  );
+
+  /*
+   * The baked LUT is only needed by the CPU renderer and by on-demand exports.
+   * On the GPU parameter path the preview evaluates the grade from uniforms, so
+   * no lattice is baked at all — which is what removes the ~83 ms (33³) /
+   * ~590 ms (65³) main-thread stall that used to trail every slider move. The
+   * scopes read the rendered canvas and the exports bake on demand, so neither
+   * needs the lattice to be sitting around.
+   */
   useEffect(() => {
-    if (currentStats) {
-      const updateLUT = async () => {
-        const lut = await generateLUT(currentStats, adjustments, lutSize, colorConfig, engine);
-        setLutData(lut);
-      };
-      updateLUT();
-    }
+    if (!currentStats) return;
+    // Bake when the CPU is painting, or as soon as it is waiting to paint — the
+    // GPU path itself never needs a lattice.
+    if (renderer.mode === 'gpu' && !renderer.pending) return;
+    let cancelled = false;
+    void (async () => {
+      const lut = await generateLUT(currentStats, adjustments, lutSize, colorConfig, engine);
+      if (!cancelled) setLutData(lut);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentStats, adjustments, lutSize, colorConfig, engine, renderer.mode, renderer.pending]);
+
+  /** Bake the current grade on demand (exports never reuse a stale lattice). */
+  const bakeLut = useCallback(async () => {
+    if (!currentStats) return null;
+    return generateLUT(currentStats, adjustments, lutSize, colorConfig, engine);
   }, [currentStats, adjustments, lutSize, colorConfig, engine]);
+
+  /** The viewer reports every finished frame; the scopes re-read it from here. */
+  const handlePreviewRender = useCallback((canvas: HTMLCanvasElement | null, version: number) => {
+    setPreviewCanvas(canvas);
+    setGradeVersion(version);
+  }, []);
 
   // Undo / redo keyboard shortcuts.
   useEffect(() => {
@@ -143,9 +186,13 @@ const App: React.FC = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [undo, redo]);
 
-  const handleDownloadLUT = () => {
-    if (!lutData) return;
-    const blob = new Blob([lutData], { type: 'text/plain' });
+  const handleDownloadLUT = async () => {
+    // Always bake from the live settings rather than reusing whichever LUT the
+    // renderer last produced, so the exported file can never trail the grade
+    // that is on screen.
+    const lut = await bakeLut();
+    if (!lut) return;
+    const blob = new Blob([lut], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -170,7 +217,8 @@ const App: React.FC = () => {
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
 
-    applyLUTToImage(canvas, img, lutData);
+    const lut = await bakeLut();
+    applyLUTToImage(canvas, img, lut);
 
     const link = document.createElement('a');
     link.download = `S_CHAK_STUDIO_${Date.now()}.png`;
@@ -200,6 +248,7 @@ const App: React.FC = () => {
               <VideoPanel
                 videoSrc={videoSrc}
                 lutData={lutData}
+                gradeParams={gradeParams}
                 isProcessing={isProcessing}
                 onGrabFrame={(dataUrl) => {
                   setSampleImage(dataUrl);
@@ -211,16 +260,19 @@ const App: React.FC = () => {
               <PreviewSection
                 sampleImage={sampleImage}
                 lutData={lutData}
+                gradeParams={gradeParams}
                 isProcessing={isProcessing}
                 gpuEnabled={settings.gpuAcceleration}
                 onRendererChange={handleRendererChange}
+                onRender={handlePreviewRender}
               />
             )}
           </div>
           {!videoSrc && (
             <ScopesPanel
               sampleImage={sampleImage}
-              lutData={lutData}
+              previewCanvas={previewCanvas}
+              gradeVersion={gradeVersion}
               referenceImage={refImage}
             />
           )}
@@ -292,7 +344,7 @@ const App: React.FC = () => {
           {/* Footer Actions */}
           <div className="p-4 border-t border-border bg-card">
             <ControlPanel
-              hasLut={!!lutData}
+              canExport={!!currentStats}
               canUndo={canUndo}
               canRedo={canRedo}
               onUndo={undo}
@@ -304,7 +356,8 @@ const App: React.FC = () => {
 
             <div className="mt-2">
               <ExportMenu
-                lutData={lutData}
+                resolveLut={bakeLut}
+                canExport={!!currentStats}
                 baseName={(lutAnalysis?.title.replace(/\s+/g, '_') || 'S_CHAK_STUDIO') + `_${lutSize}`}
               />
             </div>

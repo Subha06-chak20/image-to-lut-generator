@@ -1,10 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { loadLUT } from '../services/lut/load';
+import { GradeParams } from '../services/gpu/gradeParams';
 import { LUTRenderer } from '../services/render/webgl';
 
 interface VideoPanelProps {
   videoSrc: string;
   lutData: string | null;
+  /**
+   * The grade as shader uniforms. Preferred over `lutData`: the parameters are
+   * uploaded once per grade change instead of a lattice being re-sampled and
+   * re-uploaded on every playback frame.
+   */
+  gradeParams?: GradeParams | null;
   onGrabFrame: (dataUrl: string) => void;
   onClose: () => void;
   isProcessing: boolean;
@@ -32,10 +39,11 @@ function seek(video: HTMLVideoElement, time: number): Promise<void> {
  * Video mode: realtime LUT preview over playback (WebGL), a seekable frame
  * filmstrip, and frame grabs that feed the still pipeline.
  */
-const VideoPanel: React.FC<VideoPanelProps> = ({ videoSrc, lutData, onGrabFrame, onClose, isProcessing }) => {
+const VideoPanel: React.FC<VideoPanelProps> = ({ videoSrc, lutData, gradeParams, onGrabFrame, onClose, isProcessing }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lutRef = useRef<string | null>(lutData);
+  const paramsRef = useRef<GradeParams | null>(gradeParams ?? null);
   const [thumbs, setThumbs] = useState<Thumb[]>([]);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +51,10 @@ const VideoPanel: React.FC<VideoPanelProps> = ({ videoSrc, lutData, onGrabFrame,
   useEffect(() => {
     lutRef.current = lutData;
   }, [lutData]);
+
+  useEffect(() => {
+    paramsRef.current = gradeParams ?? null;
+  }, [gradeParams]);
 
   // Realtime render loop.
   useEffect(() => {
@@ -52,6 +64,10 @@ const VideoPanel: React.FC<VideoPanelProps> = ({ videoSrc, lutData, onGrabFrame,
 
     let renderer: LUTRenderer | null = null;
     let raf = 0;
+    // Only re-upload the grade when it actually changed: the video frame is
+    // re-uploaded every tick, but the grade is not.
+    let lastParams: GradeParams | null = null;
+    let lastLut: string | null | undefined;
 
     const render = () => {
       if (!renderer) {
@@ -63,8 +79,21 @@ const VideoPanel: React.FC<VideoPanelProps> = ({ videoSrc, lutData, onGrabFrame,
       }
       if (renderer && video.videoWidth) {
         renderer.setImage(video, video.videoWidth, video.videoHeight);
-        renderer.setLUT(loadLUT(lutRef.current));
-        renderer.render();
+        const p = paramsRef.current;
+        if (p) {
+          if (p !== lastParams) {
+            renderer.setGradeParams(p); // uploads the grade and renders
+            lastParams = p;
+          } else {
+            renderer.render();
+          }
+        } else {
+          if (lutRef.current !== lastLut) {
+            renderer.setLUT(loadLUT(lutRef.current));
+            lastLut = lutRef.current;
+          }
+          renderer.render();
+        }
       }
       raf = requestAnimationFrame(render);
     };

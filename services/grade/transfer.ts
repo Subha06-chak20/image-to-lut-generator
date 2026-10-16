@@ -9,7 +9,7 @@
  * - `threeWay`          separate shadow/mid/highlight mapping
  */
 
-import { LAB, RGB, Stats } from '../../types';
+import { HistogramData, LAB, RGB, Stats } from '../../types';
 import { labToRgb, rgbToLab } from '../color/conversions';
 import { applyMatVec, matInvSqrtSym, matMul, matSqrtSym } from '../color/linalg';
 import { NEUTRAL_COV, NEUTRAL_MEAN, NEUTRAL_STD } from '../analysis/stats';
@@ -101,6 +101,34 @@ function inverseCdf(cdf: Float32Array, range: [number, number], p: number): numb
   }
   return max;
 }
+
+/**
+ * Precompute `inverseCdf` over a uniform grid of probabilities, so a shader can
+ * reproduce the same mapping with a single texture fetch instead of a 256-step
+ * scan per channel per pixel.
+ *
+ * The first two entries are the p = 0 and p = 1 endpoints, so a linear sample of
+ * the table brackets the true step function exactly at the edges.
+ */
+export function inverseCdfTable(
+  hist: HistogramData,
+  ch: Channel,
+  samples: number,
+): Float32Array {
+  const out = new Float32Array(samples);
+  const denom = samples - 1;
+  for (let i = 0; i < samples; i++) {
+    out[i] = inverseCdf(hist[ch], hist.range[ch], i / denom);
+  }
+  return out;
+}
+
+/** Neutral-probability CDF input parameters, exposed for the shader path. */
+export const HISTOGRAM_CDF_INPUT = {
+  l: { mu: NEUTRAL_MEAN.l, sigma: NEUTRAL_STD.l },
+  a: { mu: NEUTRAL_MEAN.a, sigma: NEUTRAL_STD.a },
+  b: { mu: NEUTRAL_MEAN.b, sigma: NEUTRAL_STD.b },
+} as const;
 
 export function histogramMatchTransfer(rgb: RGB, target: Stats): RGB {
   const hist = target.histogram;

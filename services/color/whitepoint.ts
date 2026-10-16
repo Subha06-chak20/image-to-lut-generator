@@ -93,19 +93,26 @@ export function bradfordAdaptation(from: Chromaticity, to: Chromaticity): Mat3 {
 }
 
 /**
+ * The Bradford adaptation matrix implied by a temperature/tint pair, in the
+ * coordinates of the given gamut. Exposed so a GPU backend can upload the
+ * adaptation as a matrix instead of recomputing it per pixel.
+ */
+export function whiteBalanceMatrix(gamut: GamutId, tempK: number, tint = 0): Mat3 {
+  const source = kelvinToXy(REFERENCE_KELVIN);
+  const target = kelvinToXy(tempK);
+  // Tint nudges the target along the green/magenta axis (approximate).
+  const tinted: Chromaticity = { x: target.x, y: target.y * (1 + (tint / 100) * 0.12) };
+  return bradfordAdaptation(source, tinted);
+}
+
+/**
  * Apply a temperature/tint white balance to linear RGB in a given gamut.
  * `tint` runs -100 (magenta) .. +100 (green).
  */
 export function whiteBalanceLinear(rgb: RGB, gamut: GamutId, tempK: number, tint = 0): RGB {
   const g = GAMUTS[gamut];
+  const a = whiteBalanceMatrix(gamut, tempK, tint);
   const toXyz = applyMat3(g.toXYZ, rgb);
-
-  const source = kelvinToXy(REFERENCE_KELVIN);
-  const target = kelvinToXy(tempK);
-  // Tint nudges the target along the green/magenta axis (approximate).
-  const tinted: Chromaticity = { x: target.x, y: target.y * (1 + (tint / 100) * 0.12) };
-
-  const a = bradfordAdaptation(source, tinted);
   const adapted = applyMat3(a, toXyz);
   return applyMat3(g.fromXYZ, adapted);
 }

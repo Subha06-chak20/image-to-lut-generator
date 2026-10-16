@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { applyLUTToImage } from '../services/lutGenerator';
 import {
   COLOR_BAR_TARGETS,
   computeHistogram,
@@ -19,7 +18,14 @@ type ScopeSource = 'graded' | 'target' | 'reference';
 
 interface ScopesPanelProps {
   sampleImage: string;
-  lutData: string | null;
+  /**
+   * The rendered preview canvas — the graded frame at full image resolution.
+   * Reading it directly means the scopes show exactly what is on screen for
+   * either backend, and no LUT has to be baked just to feed them.
+   */
+  previewCanvas: HTMLCanvasElement | null;
+  /** Bumped after each committed render so the scopes re-read the canvas. */
+  gradeVersion: number;
   referenceImage: string | null;
 }
 
@@ -39,16 +45,6 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = reject;
     img.src = src;
   });
-}
-
-function downsizedCanvas(img: HTMLImageElement): HTMLCanvasElement {
-  const scale = Math.min(1, MAX_WIDTH / img.naturalWidth);
-  const w = Math.max(1, Math.round(img.naturalWidth * scale));
-  const h = Math.max(1, Math.round(img.naturalHeight * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  return canvas;
 }
 
 function scopeImageToCanvas(src: ScopeImage, tint: [number, number, number]): HTMLCanvasElement {
@@ -71,7 +67,7 @@ function scopeImageToCanvas(src: ScopeImage, tint: [number, number, number]): HT
   return canvas;
 }
 
-const ScopesPanel: React.FC<ScopesPanelProps> = ({ sampleImage, lutData, referenceImage }) => {
+const ScopesPanel: React.FC<ScopesPanelProps> = ({ sampleImage, previewCanvas, gradeVersion, referenceImage }) => {
   const [open, setOpen] = useState(true);
   const [tab, setTab] = useState<ScopeTab>('waveform');
   const [source, setSource] = useState<ScopeSource>('graded');
@@ -90,12 +86,26 @@ const ScopesPanel: React.FC<ScopesPanelProps> = ({ sampleImage, lutData, referen
         const target = sampleImageData(targetImg, MAX_WIDTH);
 
         let graded: ImageData | null = null;
-        const c = downsizedCanvas(targetImg);
-        applyLUTToImage(c, targetImg, lutData);
-        try {
-          graded = c.getContext('2d', { willReadFrequently: true })?.getImageData(0, 0, c.width, c.height) ?? null;
-        } catch {
-          graded = null;
+        // The graded scope is read straight off the rendered preview, so it
+        // shows exactly what is on screen whichever backend painted it. Zoom and
+        // pan are presentation transforms on the element, not the backing store,
+        // so the canvas still holds the full frame at native resolution.
+        if (previewCanvas && previewCanvas.width > 0 && previewCanvas.height > 0) {
+          try {
+            const scale = Math.min(1, MAX_WIDTH / previewCanvas.width);
+            const w = Math.max(1, Math.round(previewCanvas.width * scale));
+            const h = Math.max(1, Math.round(previewCanvas.height * scale));
+            const c = document.createElement('canvas');
+            c.width = w;
+            c.height = h;
+            const ctx = c.getContext('2d', { willReadFrequently: true });
+            if (ctx) {
+              ctx.drawImage(previewCanvas, 0, 0, w, h);
+              graded = ctx.getImageData(0, 0, w, h);
+            }
+          } catch {
+            graded = null;
+          }
         }
 
         let reference: ImageData | null = null;
@@ -117,7 +127,7 @@ const ScopesPanel: React.FC<ScopesPanelProps> = ({ sampleImage, lutData, referen
     return () => {
       cancelled = true;
     };
-  }, [sampleImage, lutData, referenceImage, open]);
+  }, [sampleImage, previewCanvas, gradeVersion, referenceImage, open]);
 
   // Draw the selected scope.
   useEffect(() => {

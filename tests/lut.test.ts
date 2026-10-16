@@ -20,6 +20,16 @@ describe('buildLUT3D', () => {
     expect(last[1]).toBeCloseTo(1, 6);
     expect(last[2]).toBeCloseTo(1, 6);
   });
+
+  it('keeps out-of-range samples instead of clamping the lattice', () => {
+    // An affine transfer is unbounded and the lattice corners sit outside any
+    // real gamut. Clamping here would break the CPU renderer's convergence to
+    // the GPU parameter path, so the lattice must stay a faithful sample — the
+    // 8-bit output clamps, and so does every .cube consumer.
+    const lut = buildLUT3D(3, (rgb) => ({ r: rgb.r * 4 - 2, g: rgb.g, b: rgb.b }));
+    expect(lut.data[0]).toBeCloseTo(-2, 6); // black corner stays -2
+    expect(lut.data[lut.data.length - 3]).toBeCloseTo(2, 6); // white corner stays +2
+  });
 });
 
 describe('trilinear sampling', () => {
