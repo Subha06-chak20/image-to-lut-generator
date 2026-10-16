@@ -23,7 +23,7 @@ import ExportMenu from './components/ExportMenu';
 import LoadingOverlay from './components/LoadingOverlay';
 import SettingsDialog from './components/SettingsDialog';
 import AboutDialog from './components/AboutDialog';
-import Wordmark from './components/Wordmark';
+import Wordmark, { LogoImage } from './components/Wordmark';
 
 const DEFAULT_SAMPLE_URL = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=1200';
 
@@ -366,10 +366,9 @@ const App: React.FC = () => {
             {!refImage && (
               <div className="rounded-lg border border-border bg-card/60 p-5 text-center animate-fade-in">
                 <div className="flex justify-center">
-                  <Wordmark size="md" />
+                  <LogoImage height={44} />
                 </div>
-                <p className="mt-3 text-[11px] text-brand italic">{BRAND.tagline}</p>
-                <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
                   Import a reference image to extract its look, then grade your target with
                   wheels, curves and sliders.
                 </p>

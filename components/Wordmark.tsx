@@ -10,29 +10,52 @@ interface BrandMarkProps {
 /**
  * The Lutcraft mark.
  *
- * An indigo tile carrying the colour-wheel handle — the app's signature
- * interaction (drag the dot around the wheel) reduced to two shapes so it still
- * reads at 16 px in a browser tab. Deliberately no gradients beyond one
- * restrained two-stop wash, and no decorative extras.
+ * The official 3D translucent curved mark with gradient layers, scaled cleanly
+ * across all sizes.
  */
 export const BrandMark: React.FC<BrandMarkProps> = ({ size = 28, className = '' }) => (
-  <span
-    className={`brand-tile inline-flex items-center justify-center shrink-0 shadow-sm ${className}`}
-    style={{ width: size, height: size, borderRadius: Math.round(size * 0.28) }}
-    aria-hidden="true"
-  >
-    <svg viewBox="0 0 32 32" width={size} height={size} focusable="false">
-      <circle
-        cx="15"
-        cy="17"
-        r="8.6"
-        fill="none"
-        stroke="rgba(255,255,255,0.5)"
-        strokeWidth="2.8"
-      />
-      <circle cx="21.2" cy="10.6" r="4" fill="#fff" />
-    </svg>
-  </span>
+  <img
+    src="/mark.png"
+    alt={BRAND.name}
+    width={size}
+    height={size}
+    className={`inline-block shrink-0 object-contain drop-shadow-sm select-none ${className}`}
+    style={{ width: size, height: size }}
+    draggable={false}
+  />
+);
+
+export interface LogoImageProps {
+  className?: string;
+  onDark?: boolean;
+  height?: number | string;
+}
+
+/**
+ * Full Lutcraft logo image lockup (mark + stylized lettering).
+ * Automatically displays light/dark variant according to active theme.
+ */
+export const LogoImage: React.FC<LogoImageProps> = ({ className = '', onDark, height = 36 }) => (
+  <>
+    <img
+      src="/logo.png"
+      alt={`${BRAND.name} — ${BRAND.descriptor}`}
+      className={`object-contain select-none ${
+        onDark === true ? 'hidden' : onDark === false ? 'inline-block' : 'inline-block dark:hidden'
+      } ${className}`}
+      style={{ height }}
+      draggable={false}
+    />
+    <img
+      src="/logo-dark.png"
+      alt={`${BRAND.name} — ${BRAND.descriptor}`}
+      className={`object-contain select-none ${
+        onDark === true ? 'inline-block' : onDark === false ? 'hidden' : 'hidden dark:inline-block'
+      } ${className}`}
+      style={{ height }}
+      draggable={false}
+    />
+  </>
 );
 
 interface WordmarkProps {

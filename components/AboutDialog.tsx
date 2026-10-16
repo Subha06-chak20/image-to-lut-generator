@@ -1,6 +1,6 @@
 import React from 'react';
 import Modal from './Modal';
-import Wordmark from './Wordmark';
+import Wordmark, { LogoImage } from './Wordmark';
 import { BRAND } from '../services/brand';
 
 interface AboutDialogProps {
@@ -42,10 +42,9 @@ const AboutDialog: React.FC<AboutDialogProps> = ({ open, onClose, extra }) => (
       </div>
     }
   >
-    <div className="flex flex-col items-center text-center py-1">
-      <Wordmark size="lg" />
-      <p className="mt-4 text-[13px] text-brand italic">{BRAND.tagline}</p>
-      <p className="mt-2 text-[11px] text-muted-foreground">{BRAND.descriptor}</p>
+    <div className="flex flex-col items-center text-center py-2">
+      <LogoImage height={52} />
+      <p className="mt-3 text-[11px] text-muted-foreground">{BRAND.descriptor}</p>
     </div>
 
     <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-2">
