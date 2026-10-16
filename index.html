@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Lutcraft — Color Grading &amp; LUT Creation Studio. Create your look. Craft your colour.">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#F5F4F0">
+    <title>Lutcraft — Color Grading &amp; LUT Creation Studio</title>
+    <!-- Lutcraft mark: 3D translucent curved mark -->
+    <link rel="icon" type="image/png" href="/image-to-lut-generator/mark.png">
+    <script>
+        // Paint the persisted theme before first paint. React re-applies it on
+        // mount; doing it here as well means a Dark Studio reload never flashes
+        // the Light Studio background. Fails silently if storage is unavailable.
+        (function () {
+            try {
+                var raw = window.localStorage.getItem('lutcraft.settings.v1');
+                var theme = raw ? JSON.parse(raw).theme : null;
+                if (theme === 'dark') {
+                    document.documentElement.classList.add('dark');
+                    var meta = document.querySelector('meta[name="theme-color"]');
+                    if (meta) meta.setAttribute('content', '#171717');
+                }
+            } catch (e) { /* defaults to Light Studio */ }
+        })();
+    </script>
+  <script type="module" crossorigin src="/image-to-lut-generator/assets/index-qPVOCk3O.js"></script>
+  <link rel="stylesheet" crossorigin href="/image-to-lut-generator/assets/index-BB72GqvS.css">
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>
